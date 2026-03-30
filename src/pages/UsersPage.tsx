@@ -12,6 +12,8 @@ export default function UsersPage() {
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("user");
+  const [newGoal, setNewGoal] = useState("0");
+  const [newSector, setNewSector] = useState("");
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,6 +54,8 @@ export default function UsersPage() {
           username: newUsername,
           password: newPassword,
           role: newRole,
+          daily_goal: newGoal,
+          sector: newSector,
         }),
       });
       if (res.status === 401 || res.status === 403) {
@@ -63,6 +67,8 @@ export default function UsersPage() {
         setNewUsername("");
         setNewPassword("");
         setNewRole("user");
+        setNewGoal("0");
+        setNewSector("");
         setIsCreating(false);
         fetchUsers();
       } else {
@@ -94,6 +100,52 @@ export default function UsersPage() {
       }
     } catch (error) {
       console.error("Error deleting user:", error);
+    }
+  };
+
+  const handleUpdateGoal = async (id: number, goal: string) => {
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ daily_goal: goal }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        navigate("/login");
+        return;
+      }
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error updating goal:", error);
+    }
+  };
+
+  const handleUpdateSector = async (id: number, sector: string) => {
+    try {
+      const res = await fetch(`/api/users/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sector }),
+      });
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        navigate("/login");
+        return;
+      }
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch (error) {
+      console.error("Error updating sector:", error);
     }
   };
 
@@ -173,6 +225,30 @@ export default function UsersPage() {
                 <option value="admin">Administrador</option>
               </select>
             </div>
+            <div className="w-32">
+              <label className="block text-sm font-medium text-zinc-700">
+                Meta Diária
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={newGoal}
+                onChange={(e) => setNewGoal(e.target.value)}
+                className="mt-1 block w-full border border-zinc-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-zinc-700">
+                Setor/Função
+              </label>
+              <input
+                type="text"
+                value={newSector}
+                onChange={(e) => setNewSector(e.target.value)}
+                placeholder="Ex: Vendas, Suporte..."
+                className="mt-1 block w-full border border-zinc-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+              />
+            </div>
             <button
               type="submit"
               className="w-full sm:w-auto inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
@@ -200,7 +276,7 @@ export default function UsersPage() {
                   <div>
                     <div className="flex items-center gap-3">
                       <p className="text-sm font-medium text-emerald-600 truncate">
-                        {u.username}
+                        {u.username} {u.sector ? `- ${u.sector}` : ""}
                       </p>
                       <span
                         className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -226,6 +302,23 @@ export default function UsersPage() {
                           <Copy className="h-4 w-4" />
                         )}
                       </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs font-medium text-zinc-500">Meta Diária:</span>
+                      <input
+                        type="number"
+                        min="0"
+                        defaultValue={u.daily_goal || 0}
+                        onBlur={(e) => handleUpdateGoal(u.id, e.target.value)}
+                        className="w-16 text-xs border border-zinc-300 rounded px-1 py-0.5 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
+                      <span className="text-xs font-medium text-zinc-500 ml-2">Setor:</span>
+                      <input
+                        type="text"
+                        defaultValue={u.sector || ""}
+                        onBlur={(e) => handleUpdateSector(u.id, e.target.value)}
+                        className="w-32 text-xs border border-zinc-300 rounded px-1 py-0.5 focus:ring-emerald-500 focus:border-emerald-500"
+                      />
                     </div>
                   </div>
                   <div className="flex items-center gap-4">

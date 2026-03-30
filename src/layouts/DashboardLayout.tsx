@@ -70,7 +70,9 @@ export default function DashboardLayout() {
                   </div>
                 </div>
                 <div className="ml-3">
-                  <p className="text-sm font-medium text-white">{user?.username}</p>
+                  <p className="text-sm font-medium text-white">
+                    {user?.username} {user?.sector ? `- ${user.sector}` : ""}
+                  </p>
                   <button
                     onClick={handleLogout}
                     className="text-xs font-medium text-zinc-400 hover:text-white flex items-center mt-1"

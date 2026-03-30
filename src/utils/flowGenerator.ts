@@ -17,9 +17,47 @@ export const fillTemplate = (template: string, data: any, mapLink: string) => {
 };
 
 export const generatePrompt = (data: any, mapLink: string) => {
-  // This is now a fallback or default
+  const instagramCTA = `
+<div style="background: #000; color: #fff; padding: 40px 20px; text-align: center; font-family: sans-serif;">
+  <p style="font-size: 14px; opacity: 0.7; margin-bottom: 10px;">Desenvolvido por</p>
+  <h2 style="font-size: 24px; letter-spacing: 2px; margin-bottom: 20px;">DS COMPANY</h2>
+  <a href="https://www.instagram.com/dscompany1_/" target="_blank" style="display: inline-block; background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #fff; padding: 12px 30px; border-radius: 50px; text-decoration: none; font-weight: bold; transition: transform 0.3s ease;">
+    SIGA NO INSTAGRAM @dscompany1_
+  </a>
+</div>`;
+
   const defaultTemplate = `Aja como um Arquiteto Front-end e Creative Developer sênior.
-... (rest of the prompt) ...`;
+
+Desenvolva a melhor landing page do mundo para o "\${data.name}".
+
+🚨 REQUISITO ABSOLUTO:
+A experiência deve ser 100% responsiva seguindo estritamente a filosofia MOBILE FIRST.
+Tudo deve funcionar perfeitamente em celular antes de desktop.
+
+⚙️ REQUISITOS TÉCNICOS:
+- HTML 100% standalone (CSS + JS internos)
+- Alta performance
+- Design moderno e persuasivo
+
+📍 INFORMAÇÕES:
+- Nome: \${data.name}
+- Endereço: \${data.address}
+- Cidade: \${data.city}
+- WhatsApp: \${data.phone}
+- Descrição: \${data.description}
+- Serviços: \${data.services}
+
+💎 CRÉDITOS E INSTAGRAM (OBRIGATÓRIO NO RODAPÉ):
+Adicione este código HTML exatamente como está no final da página, antes de fechar o body:
+${instagramCTA}
+
+⚠️ REGRAS DE OURO (PROIBIDO VIOLAR):
+1. RETORNE APENAS O CÓDIGO HTML.
+2. NÃO ESCREVA NADA ANTES DO HTML (NEM "AQUI ESTÁ O CÓDIGO", NEM "ESTE É O CÓDIGO").
+3. NÃO USE BLOCOS DE CÓDIGO MARKDOWN (NÃO USE \`\`\`html OU \`\`\`).
+4. O RESULTADO DEVE COMEÇAR DIRETAMENTE COM <!DOCTYPE html> E TERMINAR COM </html>.
+5. QUALQUER TEXTO FORA DAS TAGS HTML QUEBRARÁ O SISTEMA.`;
+  
   return fillTemplate(defaultTemplate, data, mapLink);
 };
 
@@ -108,7 +146,14 @@ export const generateFlowJson = (promptText: string, siteName: string = "DS Comp
                     }
                   ]
                 }
-              ]
+              ],
+              "systemInstruction": {
+                "parts": [
+                  {
+                    "text": "Você é um gerador de código HTML puro. Retorne APENAS o código HTML completo, começando com <!DOCTYPE html> e terminando com </html>. NÃO use markdown. NÃO escreva nenhuma introdução, explicação ou comentário fora das tags HTML. Se houver qualquer texto fora do HTML, o sistema falhará."
+                  }
+                ]
+              }
             }
           }
         },

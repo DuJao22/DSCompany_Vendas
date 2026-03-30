@@ -982,6 +982,9 @@ export default function SiteList() {
                       <p className="text-xs text-zinc-500 truncate">
                         {site.city}
                       </p>
+                      <p className="text-xs font-medium text-emerald-600 mt-1">
+                        {site.creator_name || "N/A"} {site.creator_sector ? `(${site.creator_sector})` : ""}
+                      </p>
                     </div>
                     <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
                       <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">
@@ -1045,6 +1048,9 @@ export default function SiteList() {
                   Empresa
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Usuário
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Arquivo
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
@@ -1086,6 +1092,16 @@ export default function SiteList() {
                           {site.name}
                         </div>
                         <div className="text-sm text-zinc-500">{site.city}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-zinc-900">
+                          {site.creator_name || "N/A"}
+                        </div>
+                        {site.creator_sector && (
+                          <div className="text-xs text-zinc-500">
+                            {site.creator_sector}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2">

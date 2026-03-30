@@ -61,6 +61,20 @@ async function initializeSchema() {
       // Column already exists, ignore
     }
 
+    // Add daily_goal column to users if it doesn't exist
+    try {
+      await db.sql`ALTER TABLE users ADD COLUMN daily_goal INTEGER DEFAULT 0`;
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
+    // Add sector column to users if it doesn't exist
+    try {
+      await db.sql`ALTER TABLE users ADD COLUMN sector TEXT`;
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     // Add full_data column to sites if it doesn't exist
     try {
       await db.sql`ALTER TABLE sites ADD COLUMN full_data TEXT`;
@@ -68,12 +82,19 @@ async function initializeSchema() {
       // Column already exists, ignore
     }
 
-    // Insert default template if none exist
-    const templates = await db.sql`SELECT COUNT(*) as count FROM templates`;
-    const templateCount = templates[0].count;
+    // Insert or Update default templates
+    const templates = await db.sql`SELECT id, name FROM templates`;
     
-    if (templateCount === 0) {
-      const defaultPrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
+    const instagramCTA = `
+<div style="background: #000; color: #fff; padding: 40px 20px; text-align: center; font-family: sans-serif;">
+  <p style="font-size: 14px; opacity: 0.7; margin-bottom: 10px;">Desenvolvido por</p>
+  <h2 style="font-size: 24px; letter-spacing: 2px; margin-bottom: 20px;">DS COMPANY</h2>
+  <a href="https://www.instagram.com/dscompany1_/" target="_blank" style="display: inline-block; background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #fff; padding: 12px 30px; border-radius: 50px; text-decoration: none; font-weight: bold; transition: transform 0.3s ease;">
+    SIGA NO INSTAGRAM @dscompany1_
+  </a>
+</div>`;
+
+    const defaultPrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
 
 Desenvolva a melhor landing page do mundo para o "\${data.name}".
 
@@ -159,12 +180,16 @@ Criar uma landing page extremamente persuasiva focada em atrair clientes para o 
 - Texto forte: “Venha viver a verdadeira experiência da culinária mineira!”
 - Destaque para família e tradição
 
-⚠️ REGRAS FINAIS:
-- Página extremamente profissional
-- Totalmente responsiva
-- Alta conversão
-- NÃO usar markdown
-- Retornar APENAS HTML completo`;
+💎 CRÉDITOS E INSTAGRAM (OBRIGATÓRIO NO RODAPÉ):
+Adicione este código HTML exatamente como está no final da página, antes de fechar o body:
+${instagramCTA}
+
+⚠️ REGRAS DE OURO (PROIBIDO VIOLAR):
+1. RETORNE APENAS O CÓDIGO HTML.
+2. NÃO ESCREVA NADA ANTES DO HTML (NEM "AQUI ESTÁ O CÓDIGO", NEM "ESTE É O CÓDIGO").
+3. NÃO USE BLOCOS DE CÓDIGO MARKDOWN (NÃO USE \`\`\`html OU \`\`\`).
+4. O RESULTADO DEVE COMEÇAR DIRETAMENTE COM <!DOCTYPE html> E TERMINAR COM </html>.
+5. QUALQUER TEXTO FORA DAS TAGS HTML QUEBRARÁ O SISTEMA.`;
 
       const defaultFlow = JSON.stringify({
         "nodes": [
@@ -184,7 +209,10 @@ Criar uma landing page extremamente persuasiva focada em atrair clientes para o 
                 "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={YOUR_API_KEY}",
                 "method": "POST",
                 "body": {
-                  "contents": [{ "parts": [{ "text": "{{prompt}}" }] }]
+                  "contents": [{ "parts": [{ "text": "{{prompt}}" }] }],
+                  "systemInstruction": {
+                    "parts": [{ "text": "Você é um gerador de código HTML puro. Retorne APENAS o código HTML completo, começando com <!DOCTYPE html> e terminando com </html>. NÃO use markdown. NÃO escreva nenhuma introdução, explicação ou comentário fora das tags HTML. Se houver qualquer texto fora do HTML, o sistema falhará." }]
+                  }
                 }
               }
             }
@@ -213,24 +241,49 @@ Criar uma landing page extremamente persuasiva focada em atrair clientes para o 
         ]
       });
 
-      await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Rústico Padrão', ${defaultPrompt}, ${defaultFlow})`;
-      
       const modernPrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
 Desenvolva uma landing page ultra-moderna e minimalista para "\${data.name}".
 Foco em tecnologia, design limpo e alta conversão.
 Use Dark Mode por padrão com acentos em Neon.
 Placeholder: \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink}.
-Retorne APENAS HTML completo.`;
+
+💎 CRÉDITOS E INSTAGRAM (OBRIGATÓRIO NO RODAPÉ):
+Adicione este código HTML exatamente como está no final da página, antes de fechar o body:
+${instagramCTA}
+
+⚠️ REGRAS DE OURO (PROIBIDO VIOLAR):
+1. RETORNE APENAS O CÓDIGO HTML.
+2. NÃO ESCREVA NADA ANTES DO HTML (NEM "AQUI ESTÁ O CÓDIGO", NEM "ESTE É O CÓDIGO").
+3. NÃO USE BLOCOS DE CÓDIGO MARKDOWN (NÃO USE \`\`\`html OU \`\`\`).
+4. O RESULTADO DEVE COMEÇAR DIRETAMENTE COM <!DOCTYPE html> E TERMINAR COM </html>.
+5. QUALQUER TEXTO FORA DAS TAGS HTML QUEBRARÁ O SISTEMA.`;
 
       const servicePrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
 Desenvolva uma landing page focada em serviços locais para "\${data.name}".
 Design amigável, botões de agendamento claros e depoimentos.
 Placeholder: \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink}.
-Retorne APENAS HTML completo.`;
 
-      await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Moderno Tech', ${modernPrompt}, ${defaultFlow})`;
-      await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Serviços Locais', ${servicePrompt}, ${defaultFlow})`;
-    }
+💎 CRÉDITOS E INSTAGRAM (OBRIGATÓRIO NO RODAPÉ):
+Adicione este código HTML exatamente como está no final da página, antes de fechar o body:
+${instagramCTA}
+
+⚠️ REGRAS DE OURO (PROIBIDO VIOLAR):
+1. RETORNE APENAS O CÓDIGO HTML.
+2. NÃO ESCREVA NADA ANTES DO HTML (NEM "AQUI ESTÁ O CÓDIGO", NEM "ESTE É O CÓDIGO").
+3. NÃO USE BLOCOS DE CÓDIGO MARKDOWN (NÃO USE \`\`\`html OU \`\`\`).
+4. O RESULTADO DEVE COMEÇAR DIRETAMENTE COM <!DOCTYPE html> E TERMINAR COM </html>.
+5. QUALQUER TEXTO FORA DAS TAGS HTML QUEBRARÁ O SISTEMA.`;
+
+      if (templates.length === 0) {
+        await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Rústico Padrão', ${defaultPrompt}, ${defaultFlow})`;
+        await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Moderno Tech', ${modernPrompt}, ${defaultFlow})`;
+        await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Serviços Locais', ${servicePrompt}, ${defaultFlow})`;
+      } else {
+        // Update existing default templates
+        await db.sql`UPDATE templates SET prompt_template = ${defaultPrompt}, flow_structure = ${defaultFlow} WHERE name = 'Modelo Rústico Padrão'`;
+        await db.sql`UPDATE templates SET prompt_template = ${modernPrompt}, flow_structure = ${defaultFlow} WHERE name = 'Modelo Moderno Tech'`;
+        await db.sql`UPDATE templates SET prompt_template = ${servicePrompt}, flow_structure = ${defaultFlow} WHERE name = 'Modelo Serviços Locais'`;
+      }
 
     try {
       await db.sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key)`;

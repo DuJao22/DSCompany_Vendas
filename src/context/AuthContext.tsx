@@ -5,6 +5,7 @@ interface User {
   username: string;
   role: string;
   api_key?: string;
+  sector?: string;
 }
 
 interface AuthContextType {

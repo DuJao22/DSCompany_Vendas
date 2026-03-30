@@ -46,7 +46,10 @@ export default function TemplatesPage() {
             "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={YOUR_API_KEY}",
             "method": "POST",
             "body": {
-              "contents": [{ "parts": [{ "text": "{{prompt}}" }] }]
+              "contents": [{ "parts": [{ "text": "{{prompt}}" }] }],
+              "systemInstruction": {
+                "parts": [{ "text": "Você é um gerador de código HTML puro. Retorne APENAS o código HTML completo, começando com <!DOCTYPE html> e terminando com </html>. NÃO use markdown. NÃO escreva nenhuma introdução, explicação ou comentário fora das tags HTML. Se houver qualquer texto fora do HTML, o sistema falhará." }]
+              }
             }
           }
         }
@@ -162,6 +165,15 @@ export default function TemplatesPage() {
     
     setIsGenerating(true);
     try {
+      const instagramCTA = `
+<div style="background: #000; color: #fff; padding: 40px 20px; text-align: center; font-family: sans-serif;">
+  <p style="font-size: 14px; opacity: 0.7; margin-bottom: 10px;">Desenvolvido por</p>
+  <h2 style="font-size: 24px; letter-spacing: 2px; margin-bottom: 20px;">DS COMPANY</h2>
+  <a href="https://www.instagram.com/dscompany1_/" target="_blank" style="display: inline-block; background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #fff; padding: 12px 30px; border-radius: 50px; text-decoration: none; font-weight: bold; transition: transform 0.3s ease;">
+    SIGA NO INSTAGRAM @dscompany1_
+  </a>
+</div>`;
+
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -169,10 +181,15 @@ export default function TemplatesPage() {
 Crie um template de prospecção para o sistema.
 O usuário quer um template focado em: "${aiPrompt}"
 
+REGRAS OBRIGATÓRIAS PARA O PROMPT GERADO:
+1. O prompt deve exigir que a página seja MOBILE FIRST.
+2. O prompt deve exigir que a página inclua CRÉDITOS à DS Company e um link para o Instagram @dscompany1_.
+3. O prompt deve ser EXTREMAMENTE RÍGIDO sobre retornar APENAS HTML puro, sem explicações ou markdown.
+
 Retorne um JSON com o seguinte formato:
 {
   "name": "Nome Sugerido para o Template",
-  "prompt_template": "O prompt detalhado que será enviado ao Gemini para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado.",
+  "prompt_template": "O prompt detalhado que será enviado ao Gemini para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado. No final do prompt, inclua a instrução para adicionar este HTML de créditos: ${instagramCTA.replace(/"/g, "'")}",
   "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders. Se não houver necessidade de algo diferente, use a estrutura padrão fornecida abaixo."
 }
 

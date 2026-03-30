@@ -82,7 +82,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, api_key: user.api_key } });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role, api_key: user.api_key, sector: user.sector } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Erro interno no servidor' });
@@ -92,7 +92,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Get current user
 app.get('/api/auth/me', authenticateToken, async (req: any, res) => {
   try {
-    const results = await db.sql`SELECT id, username, role, api_key FROM users WHERE id = ${req.user.id}`;
+    const results = await db.sql`SELECT id, username, role, api_key, daily_goal, sector FROM users WHERE id = ${req.user.id}`;
     const user = results[0];
     res.json(user);
   } catch (error) {
@@ -122,7 +122,7 @@ app.get('/api/users', authenticateToken, async (req: any, res) => {
     return res.status(403).json({ error: 'Acesso negado' });
   }
   try {
-    const users = await db.sql`SELECT id, username, role, api_key FROM users`;
+    const users = await db.sql`SELECT id, username, role, api_key, daily_goal, sector FROM users`;
     res.json(users);
   } catch (error) {
     console.error('Users fetch error:', error);
@@ -134,7 +134,7 @@ app.post('/api/users', authenticateToken, async (req: any, res) => {
   if (req.user.role !== 'admin') {
     return res.status(403).json({ error: 'Acesso negado' });
   }
-  const { username, password, role } = req.body;
+  const { username, password, role, daily_goal, sector } = req.body;
   if (!username || !password || !role) {
     return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
   }
@@ -147,11 +147,38 @@ app.post('/api/users', authenticateToken, async (req: any, res) => {
 
     const hash = bcrypt.hashSync(password, 10);
     const apiKey = crypto.randomBytes(24).toString('hex');
-    await db.sql`INSERT INTO users (username, password_hash, role, api_key) VALUES (${username}, ${hash}, ${role}, ${apiKey})`;
+    const goal = parseInt(daily_goal) || 0;
+    const sectorStr = String(sector || '');
+    await db.sql`INSERT INTO users (username, password_hash, role, api_key, daily_goal, sector) VALUES (${username}, ${hash}, ${role}, ${apiKey}, ${goal}, ${sectorStr})`;
     res.json({ success: true });
   } catch (error) {
     console.error('Error creating user:', error);
     res.status(500).json({ error: 'Erro ao criar usuário' });
+  }
+});
+
+app.patch('/api/users/:id', authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  const { daily_goal, sector } = req.body;
+  
+  try {
+    if (daily_goal !== undefined && sector !== undefined) {
+      const goal = parseInt(daily_goal) || 0;
+      const sectorStr = String(sector || '');
+      await db.sql`UPDATE users SET daily_goal = ${goal}, sector = ${sectorStr} WHERE id = ${req.params.id}`;
+    } else if (daily_goal !== undefined) {
+      const goal = parseInt(daily_goal) || 0;
+      await db.sql`UPDATE users SET daily_goal = ${goal} WHERE id = ${req.params.id}`;
+    } else if (sector !== undefined) {
+      const sectorStr = String(sector || '');
+      await db.sql`UPDATE users SET sector = ${sectorStr} WHERE id = ${req.params.id}`;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Erro ao atualizar usuário' });
   }
 });
 
@@ -198,9 +225,15 @@ app.get('/api/stats', authenticateToken, async (req: any, res) => {
     const totalResults = await db.sql`SELECT COUNT(*) as count FROM sites`;
     const todayResults = await db.sql`SELECT COUNT(*) as count FROM sites WHERE date(created_at) = date('now')`;
     
+    // Get user progress
+    const userProgressResults = await db.sql`SELECT COUNT(*) as count FROM sites WHERE user_id = ${req.user.id} AND date(created_at) = date('now')`;
+    const userGoalResults = await db.sql`SELECT daily_goal FROM users WHERE id = ${req.user.id}`;
+    
     res.json({
       total: totalResults[0].count,
-      today: todayResults[0].count
+      today: todayResults[0].count,
+      userProgress: userProgressResults[0].count,
+      userGoal: userGoalResults[0]?.daily_goal || 0
     });
   } catch (error) {
     console.error('Error in /api/stats:', error);
@@ -304,7 +337,12 @@ app.post('/api/analyze/save', authenticateToken, async (req: any, res) => {
 // List Analyzed Links
 app.get('/api/sites', authenticateToken, async (req: any, res) => {
   try {
-    const sites = await db.sql`SELECT * FROM sites ORDER BY created_at DESC`;
+    const sites = await db.sql`
+      SELECT s.*, u.username as creator_name, u.sector as creator_sector 
+      FROM sites s 
+      LEFT JOIN users u ON s.user_id = u.id 
+      ORDER BY s.created_at DESC
+    `;
     res.json(sites);
   } catch (error) {
     console.error('Error in /api/sites:', error);
