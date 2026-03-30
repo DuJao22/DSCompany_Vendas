@@ -18,12 +18,12 @@ export default function DashboardLayout() {
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
     { name: 'Nova Análise', href: '/create', icon: PlusCircle },
     { name: 'Minhas Análises', href: '/sites', icon: List },
-    { name: 'Templates', href: '/templates', icon: Layout },
-    { name: 'API Externa', href: '/api-docs', icon: Code },
-    { name: 'Configurações', href: '/settings', icon: Settings },
   ];
 
   if (user?.role === 'admin') {
+    navigation.push({ name: 'Templates', href: '/templates', icon: Layout });
+    navigation.push({ name: 'API Externa', href: '/api-docs', icon: Code });
+    navigation.push({ name: 'Configurações', href: '/settings', icon: Settings });
     navigation.push({ name: 'Usuários', href: '/users', icon: Users });
   }
 

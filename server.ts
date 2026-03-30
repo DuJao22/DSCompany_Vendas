@@ -286,8 +286,8 @@ app.post('/api/analyze/save', authenticateToken, async (req: any, res) => {
     const imageUrlStr = String(data.image_url || '');
 
     const result = await db.sql`
-      INSERT INTO sites (slug, name, phone, address, city, description, services, map_link, image_url, expires_at, user_id)
-      VALUES (${filename}, ${nameStr}, ${phoneStr}, ${addressStr}, ${cityStr}, ${descriptionStr}, ${servicesStr}, ${mapLinkStr}, ${imageUrlStr}, ${expiresAt.toISOString()}, ${req.user.id})
+      INSERT INTO sites (slug, name, phone, address, city, description, services, map_link, image_url, expires_at, user_id, status)
+      VALUES (${filename}, ${nameStr}, ${phoneStr}, ${addressStr}, ${cityStr}, ${descriptionStr}, ${servicesStr}, ${mapLinkStr}, ${imageUrlStr}, ${expiresAt.toISOString()}, ${req.user.id}, 'prospectado')
     `;
 
     res.json({ id: result.lastID, filename });
@@ -341,7 +341,12 @@ app.post('/api/expand-url', authenticateToken, async (req: any, res) => {
 });
 
 // Proxy Endpoint for Webhooks
-app.post('/api/proxy-webhook', authenticateToken, async (req: any, res) => {
+app.post('/api/proxy-webhook', authenticateToken, async (req: any, res: any) => {
+  // Only admins can send data to endpoints
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem enviar dados para endpoints' });
+  }
+
   try {
     const { url: rawUrl, payload, method = 'POST', authToken } = req.body;
     if (!rawUrl) return res.status(400).json({ error: 'URL is required' });
@@ -535,6 +540,29 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
     }
 
     return res.status(500).json({ error: friendlyError, details: error.message });
+  }
+});
+
+// Update Site Status
+app.patch('/api/sites/:id/status', authenticateToken, async (req: any, res: any) => {
+  // Only admins can change status
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Apenas administradores podem alterar o status dos registros' });
+  }
+
+  const { status } = req.body;
+  const validStatuses = ['prospectado', 'produção', 'produzido'];
+  
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Status inválido' });
+  }
+
+  try {
+    await db.sql`UPDATE sites SET status = ${status} WHERE id = ${req.params.id}`;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating site status:', error);
+    res.status(500).json({ error: 'Erro ao atualizar status' });
   }
 });
 

@@ -1,14 +1,37 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Globe, Calendar, ArrowRight, FileJson } from "lucide-react";
+import { Globe, Calendar, ArrowRight, FileJson, Clock, RefreshCw, CheckCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
   const [stats, setStats] = useState({ total: 0, today: 0 });
-  const [recentSites, setRecentSites] = useState([]);
+  const [recentSites, setRecentSites] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "produzido":
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 items-center gap-1">
+            <CheckCircle className="w-3 h-3" /> Produzido
+          </span>
+        );
+      case "produção":
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 items-center gap-1">
+            <RefreshCw className="w-3 h-3 animate-spin" /> Produção
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-zinc-100 text-zinc-800 items-center gap-1">
+            <Clock className="w-3 h-3" /> Prospectado
+          </span>
+        );
+    }
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -152,10 +175,11 @@ export default function Dashboard() {
                         {site.name}
                       </p>
                     </div>
-                    <div className="ml-2 flex-shrink-0 flex">
+                    <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
                       <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">
                         {new Date(site.created_at).toLocaleDateString("pt-BR")}
                       </p>
+                      {getStatusBadge(site.status)}
                     </div>
                   </div>
                   <div className="mt-2 sm:flex sm:justify-between">
@@ -213,17 +237,7 @@ export default function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            new Date(site.expires_at) < new Date()
-                              ? "bg-red-100 text-red-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {new Date(site.expires_at) < new Date()
-                            ? "Expirado"
-                            : "Ativo"}
-                        </span>
+                        {getStatusBadge(site.status)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
                         {new Date(site.created_at).toLocaleDateString("pt-BR")}

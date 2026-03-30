@@ -11,14 +11,17 @@ import {
   CheckCircle,
   Send,
   Terminal,
+  Clock,
+  Play,
+  RefreshCw,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { generatePrompt, generateFlowJson } from "../utils/flowGenerator";
+import { generatePrompt, generateFlowJson, generatePromptWithTemplate } from "../utils/flowGenerator";
 
 export default function SiteList() {
-  const { token, logout } = useAuth();
+  const { token, logout, user } = useAuth();
   const navigate = useNavigate();
-  const [sites, setSites] = useState([]);
+  const [sites, setSites] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Modal states
@@ -54,6 +57,19 @@ export default function SiteList() {
     error?: string;
   } | null>(null);
 
+  const addLog = (
+    message: string,
+    type: "info" | "success" | "error" = "info",
+  ) => {
+    setProcessLogs((prev) => [
+      ...prev,
+      { time: new Date().toLocaleTimeString(), message, type },
+    ]);
+  };
+
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+
   const fetchSites = async () => {
     try {
       const res = await fetch("/api/sites", {
@@ -79,7 +95,25 @@ export default function SiteList() {
 
   useEffect(() => {
     fetchSites();
+    fetchTemplates();
   }, [token]);
+
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch("/api/templates", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(data);
+        if (data.length > 0) {
+          setSelectedTemplateId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching templates:", err);
+    }
+  };
 
   const confirmDelete = async () => {
     if (!deleteModal.id) return;
@@ -160,6 +194,68 @@ export default function SiteList() {
   const [generatedFlowJson, setGeneratedFlowJson] = useState<any>(null);
   const [payloadType, setPayloadType] = useState<"flow" | "data">("flow");
 
+  const handleUpdateStatus = async (id: number, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/sites/${id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        logout();
+        navigate("/login");
+        return;
+      }
+
+      if (res.ok) {
+        fetchSites();
+        // If we are in the view modal, update the local site data too
+        if (viewModal.isOpen && viewModal.site?.id === id) {
+          setViewModal({
+            ...viewModal,
+            site: { ...viewModal.site, status: newStatus },
+          });
+        }
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setAlertModal({
+          isOpen: true,
+          message: data.error || "Erro ao atualizar status",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      setAlertModal({ isOpen: true, message: "Erro ao atualizar status" });
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case "produzido":
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800 items-center gap-1">
+            <CheckCircle className="w-3 h-3" /> Produzido
+          </span>
+        );
+      case "produção":
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 items-center gap-1">
+            <RefreshCw className="w-3 h-3 animate-spin" /> Produção
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-zinc-100 text-zinc-800 items-center gap-1">
+            <Clock className="w-3 h-3" /> Prospectado
+          </span>
+        );
+    }
+  };
+
   const handleSendToEndpoint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!endpointUrl || !endpointModal.site) return;
@@ -167,16 +263,6 @@ export default function SiteList() {
     setIsSending(true);
     setProcessLogs([]);
     setEndpointResult(null);
-
-    const addLog = (
-      message: string,
-      type: "info" | "success" | "error" = "info",
-    ) => {
-      setProcessLogs((prev) => [
-        ...prev,
-        { time: new Date().toLocaleTimeString(), message, type },
-      ]);
-    };
 
     try {
       addLog("Buscando dados completos da análise...", "info");
@@ -195,13 +281,23 @@ export default function SiteList() {
       const data = await res.json();
       addLog("Dados da análise obtidos com sucesso.", "success");
 
-      addLog("Gerando prompt Mobile First e JSON do Fluxo...", "info");
-      const promptText = generatePrompt(
+      addLog("Gerando prompt e JSON do Fluxo com base no template selecionado...", "info");
+      const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
+      
+      const promptText = selectedTemplate 
+        ? generatePromptWithTemplate(data, endpointModal.site.map_link || "", selectedTemplate.prompt_template)
+        : generatePrompt(data, endpointModal.site.map_link || "");
+        
+      const flowJson = generateFlowJson(
+        promptText, 
+        endpointModal.site.name, 
+        endpointModal.site.id, 
         data,
-        endpointModal.site.map_link || "",
+        selectedTemplate?.flow_structure
       );
-      const flowJson = generateFlowJson(promptText, endpointModal.site.name, endpointModal.site.id, data);
+      
       setGeneratedFlowJson(flowJson);
+      addLog(`Template utilizado: ${selectedTemplate?.name || "Padrão"}`, "success");
       addLog("JSON do Fluxo gerado com sucesso.", "success");
 
       const finalPayload = payloadType === "flow" ? flowJson : data;
@@ -244,6 +340,8 @@ export default function SiteList() {
             "JSON do Fluxo enviado com sucesso para o endpoint.",
             "success",
           );
+          // Update status to 'produção' after successful send
+          await handleUpdateStatus(endpointModal.site.id, "produção");
         } else {
           const errorMsg = resData.error || "Erro desconhecido no proxy";
           setEndpointResult({ success: false, error: errorMsg });
@@ -394,17 +492,36 @@ export default function SiteList() {
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-sm font-medium text-zinc-500">
-                    Expira em
-                  </h4>
-                  <p
-                    className={`mt-1 text-base font-medium ${new Date(viewModal.site.expires_at) < new Date() ? "text-red-600" : "text-emerald-600"}`}
-                  >
-                    {new Date(viewModal.site.expires_at).toLocaleDateString(
-                      "pt-BR",
+                  <h4 className="text-sm font-medium text-zinc-500">Status</h4>
+                  <div className="mt-1 flex items-center gap-2">
+                    {getStatusBadge(viewModal.site.status)}
+                    {user?.role === "admin" && (
+                      <select
+                        value={viewModal.site.status || "prospectado"}
+                        onChange={(e) =>
+                          handleUpdateStatus(viewModal.site.id, e.target.value)
+                        }
+                        className="ml-2 text-xs border rounded px-1 py-0.5 bg-white"
+                      >
+                        <option value="prospectado">Prospectado</option>
+                        <option value="produção">Produção</option>
+                        <option value="produzido">Produzido</option>
+                      </select>
                     )}
-                  </p>
+                  </div>
                 </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-zinc-500">
+                  Expira em
+                </h4>
+                <p
+                  className={`mt-1 text-base font-medium ${new Date(viewModal.site.expires_at) < new Date() ? "text-red-600" : "text-emerald-600"}`}
+                >
+                  {new Date(viewModal.site.expires_at).toLocaleDateString(
+                    "pt-BR",
+                  )}
+                </p>
               </div>
               <div>
                 <h4 className="text-sm font-medium text-zinc-500">
@@ -419,16 +536,18 @@ export default function SiteList() {
               </div>
             </div>
             <div className="mt-6 flex flex-wrap justify-end gap-3 border-t pt-4">
-              <button
-                onClick={() => {
-                  setEndpointModal({ isOpen: true, site: viewModal.site });
-                  setViewModal({ isOpen: false, site: null });
-                }}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2"
-              >
-                <Send className="w-4 h-4" />
-                Enviar para Endpoint
-              </button>
+                {user?.role === "admin" && (
+                  <button
+                    onClick={() => {
+                      setEndpointModal({ isOpen: true, site: viewModal.site });
+                      setViewModal({ isOpen: false, site: null });
+                    }}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Regenerar / Enviar
+                  </button>
+                )}
               <button
                 onClick={() => handleCopyJsonToClipboard(viewModal.site)}
                 disabled={isCopying}
@@ -490,6 +609,26 @@ export default function SiteList() {
                 endpoint.
               </p>
               <form onSubmit={handleSendToEndpoint}>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-zinc-900 mb-2">
+                    Template de Fluxo
+                  </label>
+                  <select
+                    value={selectedTemplateId || ""}
+                    onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                  >
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[10px] text-zinc-500">
+                    O template define o prompt da IA e a estrutura do fluxo.
+                  </p>
+                </div>
+
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-zinc-900 mb-2">
                     Tipo de Dados para Enviar
@@ -564,20 +703,36 @@ export default function SiteList() {
                 <div className="mt-6 flex gap-3">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       if (endpointModal.site) {
-                        const promptText = generatePrompt(
-                          endpointModal.site,
-                          endpointModal.site.map_link || "",
-                        );
+                        addLog("Gerando prompt e JSON do Fluxo com base no template selecionado...", "info");
+                        const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
+                        
+                        // Fetch full data first
+                        const res = await fetch(`/api/analyze/download/${endpointModal.site.slug}`, {
+                          headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (!res.ok) {
+                          addLog("Erro ao buscar dados da análise.", "error");
+                          return;
+                        }
+                        const data = await res.json();
+
+                        const promptText = selectedTemplate 
+                          ? generatePromptWithTemplate(data, endpointModal.site.map_link || "", selectedTemplate.prompt_template)
+                          : generatePrompt(data, endpointModal.site.map_link || "");
+                          
                         const flowJson = generateFlowJson(
-                          promptText,
-                          endpointModal.site.name,
-                          endpointModal.site.id,
-                          endpointModal.site
+                          promptText, 
+                          endpointModal.site.name, 
+                          endpointModal.site.id, 
+                          data,
+                          selectedTemplate?.flow_structure
                         );
+                        
                         setGeneratedFlowJson(flowJson);
                         setShowFlowJson(true);
+                        addLog(`Template utilizado: ${selectedTemplate?.name || "Padrão"}`, "success");
                       }
                     }}
                     className="inline-flex justify-center items-center py-2 px-4 border border-zinc-300 shadow-sm text-sm font-medium rounded-md text-zinc-700 bg-white hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -800,10 +955,11 @@ export default function SiteList() {
                         {site.city}
                       </p>
                     </div>
-                    <div className="ml-2 flex-shrink-0 flex">
+                    <div className="ml-2 flex-shrink-0 flex flex-col items-end gap-1">
                       <p className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">
                         {new Date(site.created_at).toLocaleDateString("pt-BR")}
                       </p>
+                      {getStatusBadge(site.status)}
                     </div>
                   </div>
                   <div className="mt-2 flex justify-between items-center">
@@ -815,8 +971,15 @@ export default function SiteList() {
                     </div>
                     <div className="flex items-center space-x-3">
                       <button
-                        onClick={() => setViewModal({ isOpen: true, site })}
+                        onClick={() => setEndpointModal({ isOpen: true, site })}
                         className="text-blue-600 hover:text-blue-900 flex items-center p-1"
+                        title="Regenerar / Enviar"
+                      >
+                        <RefreshCw className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => setViewModal({ isOpen: true, site })}
+                        className="text-zinc-600 hover:text-zinc-900 flex items-center p-1"
                         title="Ver Detalhes"
                       >
                         <Eye className="w-5 h-5" />
@@ -861,6 +1024,9 @@ export default function SiteList() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Data
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-500 uppercase tracking-wider">
+                  Status
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-zinc-500 uppercase tracking-wider">
                   Ações
@@ -917,8 +1083,20 @@ export default function SiteList() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-zinc-500">
                         {new Date(site.created_at).toLocaleDateString("pt-BR")}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {getStatusBadge(site.status)}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end space-x-3">
+                          {user?.role === "admin" && (
+                            <button
+                              onClick={() => setEndpointModal({ isOpen: true, site })}
+                              className="text-purple-600 hover:text-purple-900 flex items-center"
+                              title="Regenerar / Enviar"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => setViewModal({ isOpen: true, site })}
                             className="text-blue-600 hover:text-blue-900 flex items-center"

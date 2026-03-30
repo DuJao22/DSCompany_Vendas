@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Edit2, Trash2, Save, X, FileCode, Layout, Sparkles } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, FileCode, Layout, Sparkles, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { GoogleGenAI } from "@google/genai";
 
 interface Template {
   id: number;
@@ -12,7 +13,7 @@ interface Template {
 }
 
 export default function TemplatesPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -22,10 +23,18 @@ export default function TemplatesPage() {
     flow_structure: ''
   });
   const [error, setError] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  if (user?.role !== 'admin') {
+    return <div className="p-6 text-center text-zinc-500">Acesso negado.</div>;
+  }
 
   const fetchTemplates = async () => {
     try {
@@ -101,6 +110,61 @@ export default function TemplatesPage() {
     setError('');
   };
 
+  const handleGenerateWithAI = async () => {
+    if (!aiPrompt.trim()) return;
+    
+    setIsGenerating(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Você é um especialista em automação e design de landing pages.
+Crie um template de prospecção para o sistema.
+O usuário quer um template focado em: "${aiPrompt}"
+
+Retorne um JSON com o seguinte formato:
+{
+  "name": "Nome Sugerido para o Template",
+  "prompt_template": "O prompt detalhado que será enviado ao Gemini para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado.",
+  "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders."
+}
+
+A estrutura do flow_structure deve seguir este padrão:
+{
+  "nodes": [
+    { "id": "node-start", "type": "custom", "data": { "label": "Início", "type": "start", "status": "SUCCESS", "config": {} } },
+    { "id": "node-gemini", "type": "custom", "data": { "label": "Gerar HTML", "type": "httpRequest", "status": "SUCCESS", "config": { "url": "...", "method": "POST", "body": { "contents": [{ "parts": [{ "text": "{{prompt}}" }] }] } } } },
+    { "id": "node-deploy", "type": "custom", "data": { "label": "Deploy", "type": "httpRequest", "status": "SUCCESS", "config": { "url": "...", "method": "POST", "body": { "name": "{{siteName}}", "html": "{{input.text}}" } } } }
+  ],
+  "edges": [
+    { "id": "e1", "source": "node-start", "target": "node-gemini" },
+    { "id": "e2", "source": "node-gemini", "target": "node-deploy" }
+  ]
+}
+
+Retorne APENAS o JSON puro.`,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const result = JSON.parse(response.text);
+      setCurrentTemplate({
+        name: result.name,
+        prompt_template: result.prompt_template,
+        flow_structure: typeof result.flow_structure === 'string' ? result.flow_structure : JSON.stringify(result.flow_structure, null, 2)
+      });
+      setShowAiModal(false);
+      setAiPrompt('');
+      setIsEditing(true);
+    } catch (error) {
+      console.error('Error generating template with AI:', error);
+      alert('Erro ao gerar template com IA. Tente novamente.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto py-6">
       <div className="flex justify-between items-center mb-8">
@@ -108,13 +172,78 @@ export default function TemplatesPage() {
           <h2 className="text-2xl font-bold text-zinc-900 sm:text-3xl">Templates de Fluxo</h2>
           <p className="mt-1 text-sm text-zinc-500">Gerencie os modelos de prompt e estrutura de fluxo para seus sites.</p>
         </div>
-        <button
-          onClick={() => openEdit()}
-          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Novo Template
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowAiModal(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+          >
+            <Sparkles className="w-4 h-4 mr-2" /> Gerar com IA
+          </button>
+          <button
+            onClick={() => openEdit()}
+            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Novo Template
+          </button>
+        </div>
       </div>
+
+      {/* AI Generation Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-xl shadow-xl max-w-lg w-full overflow-hidden"
+          >
+            <div className="p-6 border-b border-zinc-100 flex justify-between items-center bg-purple-50">
+              <h2 className="text-xl font-bold text-purple-900 flex items-center gap-2">
+                <Sparkles className="w-6 h-6" />
+                Gerar Template com IA
+              </h2>
+              <button onClick={() => setShowAiModal(false)} className="text-zinc-400 hover:text-zinc-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-zinc-600 mb-4">
+                Descreva que tipo de template você deseja criar. A IA irá gerar o nome, o prompt e a estrutura do fluxo automaticamente.
+              </p>
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder="Ex: Um template focado em barbearias modernas com agendamento online e design dark mode..."
+                className="w-full h-32 p-3 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
+              />
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  onClick={() => setShowAiModal(false)}
+                  className="px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleGenerateWithAI}
+                  disabled={isGenerating || !aiPrompt.trim()}
+                  className="flex items-center gap-2 bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  {isGenerating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Gerar Template
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-12">

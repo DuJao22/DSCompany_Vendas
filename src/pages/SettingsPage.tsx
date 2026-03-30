@@ -99,12 +99,10 @@ export default function SettingsPage() {
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="p-6 border-b border-zinc-200">
           <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2">
-            <Key className="w-5 h-5 text-emerald-600" />
-            Integração com Inteligência Artificial (Gemini)
+            Configurações da Conta
           </h3>
           <p className="mt-1 text-sm text-zinc-500">
-            Para que o sistema consiga extrair dados dos links do Google Maps, é
-            necessário fornecer uma chave de API válida do Google Gemini.
+            Gerencie suas informações de acesso e chaves de API.
           </p>
         </div>
 
@@ -127,48 +125,58 @@ export default function SettingsPage() {
           )}
 
           <div className="space-y-6">
-            <div>
-              <label
-                htmlFor="apiKey"
-                className="block text-sm font-medium text-zinc-700"
-              >
-                Chave da API (Gemini API Key)
-              </label>
-              <div className="mt-1">
-                <input
-                  type="password"
-                  name="apiKey"
-                  id="apiKey"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="shadow-sm focus:ring-emerald-500 focus:border-emerald-500 block w-full sm:text-sm border-zinc-300 rounded-md px-4 py-2 border"
-                  placeholder="AIzaSy..."
-                />
-              </div>
-              <p className="mt-2 text-sm text-zinc-500">
-                Você pode gerar uma chave gratuitamente no{" "}
-                <a
-                  href="https://aistudio.google.com/app/apikey"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-emerald-600 hover:text-emerald-500 underline"
-                >
-                  Google AI Studio
-                </a>
-                .
-              </p>
-              <div className="mt-3 bg-blue-50 p-3 rounded-md border border-blue-100">
-                <p className="text-xs text-blue-800">
-                  <strong>Nota:</strong> A chave salva aqui no painel tem
-                  prioridade sobre a chave configurada nas variáveis de ambiente
-                  do servidor (Render/Vercel). Se você atualizou a chave no
-                  servidor, certifique-se de atualizá-la aqui também, ou deixe
-                  este campo vazio para usar a chave do servidor.
+            {user?.role === "admin" && (
+              <div>
+                <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-2">
+                  <Key className="w-5 h-5 text-emerald-600" />
+                  Integração com Inteligência Artificial (Gemini)
+                </h3>
+                <p className="mb-4 text-sm text-zinc-500">
+                  Para que o sistema consiga extrair dados dos links do Google Maps, é
+                  necessário fornecer uma chave de API válida do Google Gemini.
                 </p>
+                <label
+                  htmlFor="apiKey"
+                  className="block text-sm font-medium text-zinc-700"
+                >
+                  Chave da API (Gemini API Key)
+                </label>
+                <div className="mt-1">
+                  <input
+                    type="password"
+                    name="apiKey"
+                    id="apiKey"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="shadow-sm focus:ring-emerald-500 focus:border-emerald-500 block w-full sm:text-sm border-zinc-300 rounded-md px-4 py-2 border"
+                    placeholder="AIzaSy..."
+                  />
+                </div>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Você pode gerar uma chave gratuitamente no{" "}
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-600 hover:text-emerald-500 underline"
+                  >
+                    Google AI Studio
+                  </a>
+                  .
+                </p>
+                <div className="mt-3 bg-blue-50 p-3 rounded-md border border-blue-100">
+                  <p className="text-xs text-blue-800">
+                    <strong>Nota:</strong> A chave salva aqui no painel tem
+                    prioridade sobre a chave configurada nas variáveis de ambiente
+                    do servidor (Render/Vercel). Se você atualizou a chave no
+                    servidor, certifique-se de atualizá-la aqui também, ou deixe
+                    este campo vazio para usar a chave do servidor.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="pt-6 border-t border-zinc-200">
+            <div className={user?.role === "admin" ? "pt-6 border-t border-zinc-200" : ""}>
               <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-4">
                 <Key className="w-5 h-5 text-emerald-600" />
                 Sua Chave de API Externa (Webhook)

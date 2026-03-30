@@ -31,7 +31,7 @@ async function initializeSchema() {
         image_url TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         expires_at DATETIME NOT NULL,
-        status TEXT DEFAULT 'active',
+        status TEXT DEFAULT 'prospectado',
         user_id INTEGER,
         FOREIGN KEY (user_id) REFERENCES users (id)
       );
@@ -207,6 +207,22 @@ Criar uma landing page extremamente persuasiva focada em atrair clientes para o 
       });
 
       await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Rústico Padrão', ${defaultPrompt}, ${defaultFlow})`;
+      
+      const modernPrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
+Desenvolva uma landing page ultra-moderna e minimalista para "\${data.name}".
+Foco em tecnologia, design limpo e alta conversão.
+Use Dark Mode por padrão com acentos em Neon.
+Placeholder: \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink}.
+Retorne APENAS HTML completo.`;
+
+      const servicePrompt = `Aja como um Arquiteto Front-end e Creative Developer sênior.
+Desenvolva uma landing page focada em serviços locais para "\${data.name}".
+Design amigável, botões de agendamento claros e depoimentos.
+Placeholder: \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink}.
+Retorne APENAS HTML completo.`;
+
+      await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Moderno Tech', ${modernPrompt}, ${defaultFlow})`;
+      await db.sql`INSERT INTO templates (name, prompt_template, flow_structure) VALUES ('Modelo Serviços Locais', ${servicePrompt}, ${defaultFlow})`;
     }
 
     try {

@@ -15,7 +15,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { generatePrompt, generateFlowJson, fillTemplate } from "../utils/flowGenerator";
 
 export default function CreateSite() {
-  const { token, logout } = useAuth();
+  const { token, logout, user } = useAuth();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -339,6 +339,21 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                   "JSON do Fluxo enviado com sucesso para o endpoint.",
                   "success",
                 );
+
+                // Update status to produção
+                try {
+                  await fetch(`/api/sites/${saveData.id}/status`, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ status: "produção" }),
+                  });
+                  addLog("Status atualizado para Produção.", "success");
+                } catch (statusErr) {
+                  console.error("Error updating status:", statusErr);
+                }
               } else {
                 endpointError = resData.error || "Erro desconhecido no proxy";
                 addLog(
@@ -785,34 +800,36 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                     Selecione o modelo de prompt e fluxo que será usado para gerar o site.
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-emerald-900 mb-1">
-                    Endpoint Webhook (Opcional)
-                  </label>
-                  <div className="flex gap-2">
-                    <select
-                      value={endpointMethod}
-                      onChange={(e) => setEndpointMethod(e.target.value)}
-                      className="focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
-                    >
-                      <option value="POST">POST</option>
-                      <option value="PUT">PUT</option>
-                      <option value="PATCH">PATCH</option>
-                      <option value="GET">GET</option>
-                    </select>
-                    <input
-                      type="url"
-                      value={endpointUrl}
-                      onChange={(e) => setEndpointUrl(e.target.value)}
-                      placeholder="https://seu-endpoint.com/api/upload"
-                      className="flex-1 focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
-                    />
+                {user?.role === 'admin' && (
+                  <div>
+                    <label className="block text-sm font-medium text-emerald-900 mb-1">
+                      Endpoint Webhook (Opcional)
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={endpointMethod}
+                        onChange={(e) => setEndpointMethod(e.target.value)}
+                        className="focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                      >
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="GET">GET</option>
+                      </select>
+                      <input
+                        type="url"
+                        value={endpointUrl}
+                        onChange={(e) => setEndpointUrl(e.target.value)}
+                        placeholder="https://seu-endpoint.com/api/upload"
+                        className="flex-1 focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Se preenchido, o fluxo JSON será enviado automaticamente
+                      para esta URL.
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-emerald-700">
-                    Se preenchido, o fluxo JSON será enviado automaticamente
-                    para esta URL.
-                  </p>
-                </div>
+                )}
               </div>
             </div>
           </div>

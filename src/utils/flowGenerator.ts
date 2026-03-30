@@ -23,6 +23,10 @@ export const generatePrompt = (data: any, mapLink: string) => {
   return fillTemplate(defaultTemplate, data, mapLink);
 };
 
+export const generatePromptWithTemplate = (data: any, mapLink: string, template: string) => {
+  return fillTemplate(template, data, mapLink);
+};
+
 export const generateFlowJson = (promptText: string, siteName: string = "DS Company", flowId?: string, inputData?: any, flowStructure?: string) => {
   const id = flowId || `flow-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   
