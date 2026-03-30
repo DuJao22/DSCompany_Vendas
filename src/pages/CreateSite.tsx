@@ -800,6 +800,11 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                     className="w-full focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
                   />
                 </div>
+                <div className="bg-emerald-100/50 p-3 rounded-md border border-emerald-200">
+                  <p className="text-xs text-emerald-800">
+                    <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
+                  </p>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-emerald-900 mb-1">
                     Modelo de Template (Fluxo)

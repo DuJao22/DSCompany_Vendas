@@ -296,6 +296,11 @@ Retorne APENAS o JSON puro.`,
                 placeholder="Ex: Um template focado em barbearias modernas com agendamento online e design dark mode..."
                 className="w-full h-32 p-3 border border-zinc-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none text-sm"
               />
+              <div className="mt-3 bg-blue-50 p-3 rounded-md border border-blue-100">
+                <p className="text-xs text-blue-800">
+                  <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
+                </p>
+              </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   onClick={() => setShowAiModal(false)}

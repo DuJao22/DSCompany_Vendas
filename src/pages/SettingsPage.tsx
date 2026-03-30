@@ -172,6 +172,9 @@ export default function SettingsPage() {
                   .
                 </p>
                 <div className="mt-3 bg-blue-50 p-3 rounded-md border border-blue-100">
+                  <p className="text-xs text-blue-800 mb-2">
+                    <strong>Limites da Camada Gratuita:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong>, com um limite de <strong>15 requisições por minuto</strong>.
+                  </p>
                   <p className="text-xs text-blue-800">
                     <strong>Nota:</strong> A chave salva aqui no painel tem
                     prioridade sobre a chave configurada nas variáveis de ambiente
