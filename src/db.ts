@@ -61,6 +61,13 @@ async function initializeSchema() {
       // Column already exists, ignore
     }
 
+    // Add full_data column to sites if it doesn't exist
+    try {
+      await db.sql`ALTER TABLE sites ADD COLUMN full_data TEXT`;
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     // Insert default template if none exist
     const templates = await db.sql`SELECT COUNT(*) as count FROM templates`;
     const templateCount = templates[0].count;

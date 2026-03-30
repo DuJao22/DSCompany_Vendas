@@ -21,6 +21,8 @@ export default function CreateSite() {
   const [error, setError] = useState("");
   const [mapsLink, setMapsLink] = useState("");
   const [endpointUrl, setEndpointUrl] = useState("");
+  const [defaultEndpointFromSettings, setDefaultEndpointFromSettings] = useState("");
+  const DEFAULT_ENDPOINT = defaultEndpointFromSettings || "https://flowpost.onrender.com/api/upload";
   const [endpointMethod, setEndpointMethod] = useState("POST");
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -40,7 +42,24 @@ export default function CreateSite() {
 
   useEffect(() => {
     fetchTemplates();
+    fetchSettings();
   }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch("/api/settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.default_endpoint) {
+          setDefaultEndpointFromSettings(data.default_endpoint);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -802,9 +821,18 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                 </div>
                 {user?.role === 'admin' && (
                   <div>
-                    <label className="block text-sm font-medium text-emerald-900 mb-1">
-                      Endpoint Webhook (Opcional)
-                    </label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-sm font-medium text-emerald-900">
+                        Endpoint Webhook (Opcional)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setEndpointUrl(DEFAULT_ENDPOINT)}
+                        className="text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-100/50 px-2 py-1 rounded"
+                      >
+                        <Send className="w-3 h-3" /> Usar Endpoint Padrão
+                      </button>
+                    </div>
                     <div className="flex gap-2">
                       <select
                         value={endpointMethod}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Edit2, Trash2, Save, X, FileCode, Layout, Sparkles, RefreshCw } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, FileCode, Layout, Sparkles, RefreshCw, Import } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from "@google/genai";
 
@@ -27,6 +27,53 @@ export default function TemplatesPage() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiModal, setShowAiModal] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const DEFAULT_FLOW_JSON = {
+    "nodes": [
+      {
+        "id": "node-start",
+        "type": "custom",
+        "data": { "label": "Início do Fluxo", "type": "start", "status": "SUCCESS", "config": {} }
+      },
+      {
+        "id": "node-gemini",
+        "type": "custom",
+        "data": {
+          "label": "Gerar Landing Page",
+          "type": "httpRequest",
+          "status": "SUCCESS",
+          "config": {
+            "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={YOUR_API_KEY}",
+            "method": "POST",
+            "body": {
+              "contents": [{ "parts": [{ "text": "{{prompt}}" }] }]
+            }
+          }
+        }
+      },
+      {
+        "id": "node-deploy",
+        "type": "custom",
+        "data": {
+          "label": "Deploy do Site",
+          "type": "httpRequest",
+          "status": "SUCCESS",
+          "config": {
+            "url": "https://flowpost.onrender.com/api/upload",
+            "method": "POST",
+            "body": {
+              "name": "{{siteName}}",
+              "html": "{{input.text}}"
+            }
+          }
+        }
+      }
+    ],
+    "edges": [
+      { "id": "e1", "source": "node-start", "target": "node-gemini" },
+      { "id": "e2", "source": "node-gemini", "target": "node-deploy" }
+    ]
+  };
 
   useEffect(() => {
     fetchTemplates();
@@ -126,21 +173,11 @@ Retorne um JSON com o seguinte formato:
 {
   "name": "Nome Sugerido para o Template",
   "prompt_template": "O prompt detalhado que será enviado ao Gemini para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado.",
-  "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders."
+  "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders. Se não houver necessidade de algo diferente, use a estrutura padrão fornecida abaixo."
 }
 
-A estrutura do flow_structure deve seguir este padrão:
-{
-  "nodes": [
-    { "id": "node-start", "type": "custom", "data": { "label": "Início", "type": "start", "status": "SUCCESS", "config": {} } },
-    { "id": "node-gemini", "type": "custom", "data": { "label": "Gerar HTML", "type": "httpRequest", "status": "SUCCESS", "config": { "url": "...", "method": "POST", "body": { "contents": [{ "parts": [{ "text": "{{prompt}}" }] }] } } } },
-    { "id": "node-deploy", "type": "custom", "data": { "label": "Deploy", "type": "httpRequest", "status": "SUCCESS", "config": { "url": "...", "method": "POST", "body": { "name": "{{siteName}}", "html": "{{input.text}}" } } } }
-  ],
-  "edges": [
-    { "id": "e1", "source": "node-start", "target": "node-gemini" },
-    { "id": "e2", "source": "node-gemini", "target": "node-deploy" }
-  ]
-}
+A estrutura padrão do flow_structure é:
+${JSON.stringify(DEFAULT_FLOW_JSON, null, 2)}
 
 Retorne APENAS o JSON puro.`,
         config: {
@@ -152,7 +189,9 @@ Retorne APENAS o JSON puro.`,
       setCurrentTemplate({
         name: result.name,
         prompt_template: result.prompt_template,
-        flow_structure: typeof result.flow_structure === 'string' ? result.flow_structure : JSON.stringify(result.flow_structure, null, 2)
+        flow_structure: result.flow_structure 
+          ? (typeof result.flow_structure === 'string' ? result.flow_structure : JSON.stringify(result.flow_structure, null, 2))
+          : JSON.stringify(DEFAULT_FLOW_JSON, null, 2)
       });
       setShowAiModal(false);
       setAiPrompt('');
@@ -345,9 +384,20 @@ Retorne APENAS o JSON puro.`,
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-zinc-700 mb-1">
-                    Estrutura do Fluxo (JSON) - Use {'{{prompt}}'} e {'{{siteName}}'}
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium text-zinc-700">
+                      Estrutura do Fluxo (JSON) - Use {'{{prompt}}'} e {'{{siteName}}'}
+                    </label>
+                    <button
+                      onClick={() => setCurrentTemplate({
+                        ...currentTemplate,
+                        flow_structure: JSON.stringify(DEFAULT_FLOW_JSON, null, 2)
+                      })}
+                      className="text-[10px] font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded"
+                    >
+                      <Import className="w-3 h-3" /> Importar Fluxo Padrão
+                    </button>
+                  </div>
                   <textarea
                     value={currentTemplate.flow_structure}
                     onChange={(e) => setCurrentTemplate({ ...currentTemplate, flow_structure: e.target.value })}

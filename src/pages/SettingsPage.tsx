@@ -7,6 +7,7 @@ export default function SettingsPage() {
   const { token, user, logout } = useAuth();
   const navigate = useNavigate();
   const [apiKey, setApiKey] = useState("");
+  const [defaultEndpoint, setDefaultEndpoint] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -32,6 +33,9 @@ export default function SettingsPage() {
         if (data.gemini_api_key) {
           setApiKey(data.gemini_api_key);
         }
+        if (data.default_endpoint) {
+          setDefaultEndpoint(data.default_endpoint);
+        }
       }
     } catch (error) {
       console.error("Error fetching settings:", error);
@@ -50,7 +54,10 @@ export default function SettingsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ gemini_api_key: apiKey }),
+        body: JSON.stringify({ 
+          gemini_api_key: apiKey,
+          default_endpoint: defaultEndpoint
+        }),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -173,6 +180,38 @@ export default function SettingsPage() {
                     este campo vazio para usar a chave do servidor.
                   </p>
                 </div>
+              </div>
+            )}
+
+            {user?.role === "admin" && (
+              <div className="pt-6 border-t border-zinc-200">
+                <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-2">
+                  <Settings className="w-5 h-5 text-emerald-600" />
+                  Configuração de Endpoint Padrão
+                </h3>
+                <p className="mb-4 text-sm text-zinc-500">
+                  Defina o endpoint padrão para onde o fluxo JSON será enviado.
+                </p>
+                <label
+                  htmlFor="defaultEndpoint"
+                  className="block text-sm font-medium text-zinc-700"
+                >
+                  URL do Endpoint Padrão
+                </label>
+                <div className="mt-1">
+                  <input
+                    type="url"
+                    name="defaultEndpoint"
+                    id="defaultEndpoint"
+                    value={defaultEndpoint}
+                    onChange={(e) => setDefaultEndpoint(e.target.value)}
+                    className="shadow-sm focus:ring-emerald-500 focus:border-emerald-500 block w-full sm:text-sm border-zinc-300 rounded-md px-4 py-2 border"
+                    placeholder="https://flowpost.onrender.com/api/upload"
+                  />
+                </div>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Este URL será sugerido como o endpoint padrão ao enviar dados de análises.
+                </p>
               </div>
             )}
 

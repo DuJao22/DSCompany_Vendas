@@ -46,6 +46,8 @@ export default function SiteList() {
   const [isCopying, setIsCopying] = useState(false);
 
   const [endpointUrl, setEndpointUrl] = useState("");
+  const [defaultEndpointFromSettings, setDefaultEndpointFromSettings] = useState("");
+  const DEFAULT_ENDPOINT = defaultEndpointFromSettings || "https://flowpost.onrender.com/api/upload";
   const [endpointMethod, setEndpointMethod] = useState("POST");
   const [authToken, setAuthToken] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -96,7 +98,24 @@ export default function SiteList() {
   useEffect(() => {
     fetchSites();
     fetchTemplates();
+    fetchSettings();
   }, [token]);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch("/api/settings", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.default_endpoint) {
+          setDefaultEndpointFromSettings(data.default_endpoint);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching settings:", err);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -659,9 +678,18 @@ export default function SiteList() {
                   </div>
                 </div>
 
-                <label className="block text-sm font-medium text-zinc-900 mb-1">
-                  URL do Endpoint
-                </label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-zinc-900">
+                    URL do Endpoint
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEndpointUrl(DEFAULT_ENDPOINT)}
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded"
+                  >
+                    <Send className="w-3 h-3" /> Usar Endpoint Padrão
+                  </button>
+                </div>
                 <div className="flex gap-3">
                   <select
                     value={endpointMethod}

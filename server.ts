@@ -174,11 +174,15 @@ app.delete('/api/users/:id', authenticateToken, async (req: any, res) => {
 
 // Save settings
 app.post('/api/settings', authenticateToken, async (req: any, res) => {
-  const { gemini_api_key } = req.body;
+  const { gemini_api_key, default_endpoint } = req.body;
   
   try {
     if (gemini_api_key !== undefined) {
       await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_api_key', ${gemini_api_key}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+    }
+    
+    if (default_endpoint !== undefined) {
+      await db.sql`INSERT INTO settings (key, value) VALUES ('default_endpoint', ${default_endpoint}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
     }
     
     res.json({ success: true });
@@ -286,8 +290,8 @@ app.post('/api/analyze/save', authenticateToken, async (req: any, res) => {
     const imageUrlStr = String(data.image_url || '');
 
     const result = await db.sql`
-      INSERT INTO sites (slug, name, phone, address, city, description, services, map_link, image_url, expires_at, user_id, status)
-      VALUES (${filename}, ${nameStr}, ${phoneStr}, ${addressStr}, ${cityStr}, ${descriptionStr}, ${servicesStr}, ${mapLinkStr}, ${imageUrlStr}, ${expiresAt.toISOString()}, ${req.user.id}, 'prospectado')
+      INSERT INTO sites (slug, name, phone, address, city, description, services, map_link, image_url, expires_at, user_id, status, full_data)
+      VALUES (${filename}, ${nameStr}, ${phoneStr}, ${addressStr}, ${cityStr}, ${descriptionStr}, ${servicesStr}, ${mapLinkStr}, ${imageUrlStr}, ${expiresAt.toISOString()}, ${req.user.id}, 'prospectado', ${JSON.stringify(data)})
     `;
 
     res.json({ id: result.lastID, filename });
@@ -309,15 +313,55 @@ app.get('/api/sites', authenticateToken, async (req: any, res) => {
 });
 
 // Download JSON
-app.get('/api/analyze/download/:filename', authenticateToken, (req: any, res) => {
+app.get('/api/analyze/download/:filename', authenticateToken, async (req: any, res) => {
   const filename = req.params.filename;
-  const filepath = path.join(dadosDir, filename);
+  
+  try {
+    // First try to get from database
+    const results = await db.sql`SELECT full_data FROM sites WHERE slug = ${filename}`;
+    const site = results[0];
+    
+    if (site) {
+      if (site.full_data) {
+        try {
+          const data = JSON.parse(site.full_data);
+          return res.json(data);
+        } catch (e) {
+          console.error('Error parsing full_data from DB:', e);
+        }
+      } else {
+        // Reconstruct from columns if full_data is missing
+        const resultsFull = await db.sql`SELECT * FROM sites WHERE slug = ${filename}`;
+        const s = resultsFull[0];
+        if (s) {
+          const data = {
+            name: s.name,
+            phone: s.phone,
+            address: s.address,
+            city: s.city,
+            description: s.description,
+            services: s.services ? s.services.split(', ') : [],
+            map_link: s.map_link,
+            image_url: s.image_url,
+            status: s.status,
+            created_at: s.created_at
+          };
+          return res.json(data);
+        }
+      }
+    }
 
-  if (!fs.existsSync(filepath)) {
-    return res.status(404).json({ error: 'Arquivo não encontrado' });
+    // Fallback to file system
+    const filepath = path.join(dadosDir, filename);
+    if (fs.existsSync(filepath)) {
+      return res.download(filepath);
+    }
+
+    res.status(404).json({ error: 'Arquivo não encontrado' });
+  } catch (error) {
+    console.error('Error in /api/analyze/download:', error);
+    res.status(500).json({ error: 'Erro ao buscar dados' });
   }
-
-  res.download(filepath);
 });
 
 // Expand URL
