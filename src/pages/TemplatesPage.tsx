@@ -165,6 +165,31 @@ export default function TemplatesPage() {
     
     setIsGenerating(true);
     try {
+      let apiKey = "";
+      try {
+        const token = localStorage.getItem('token');
+        const settingsRes = await fetch("/api/settings", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (settingsRes.ok) {
+          const settings = await settingsRes.json();
+          if (settings.gemini_api_key) {
+            apiKey = settings.gemini_api_key;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching settings:", e);
+      }
+
+      if (!apiKey) {
+        apiKey = import.meta.env.VITE_GEMINI_API_KEY || (process.env as any).GEMINI_API_KEY || "";
+      }
+
+      if (!apiKey) {
+        throw new Error("Chave da API do Gemini não encontrada. Configure nas Configurações.");
+      }
+
       const instagramCTA = `
 <div style="background: #000; color: #fff; padding: 40px 20px; text-align: center; font-family: sans-serif;">
   <p style="font-size: 14px; opacity: 0.7; margin-bottom: 10px;">Desenvolvido por</p>
@@ -174,7 +199,7 @@ export default function TemplatesPage() {
   </a>
 </div>`;
 
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Você é um especialista em automação e design de landing pages.
@@ -213,9 +238,9 @@ Retorne APENAS o JSON puro.`,
       setShowAiModal(false);
       setAiPrompt('');
       setIsEditing(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error generating template with AI:', error);
-      alert('Erro ao gerar template com IA. Tente novamente.');
+      alert(error.message || 'Erro ao gerar template com IA. Tente novamente.');
     } finally {
       setIsGenerating(false);
     }
