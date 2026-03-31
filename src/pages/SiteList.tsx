@@ -686,25 +686,27 @@ export default function SiteList() {
               )}
 
               <form onSubmit={handleSendToEndpoint}>
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-zinc-900 mb-2">
-                    Template de Fluxo
-                  </label>
-                  <select
-                    value={selectedTemplateId || ""}
-                    onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
-                  >
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-[10px] text-zinc-500">
-                    O template define o prompt da IA e a estrutura do fluxo.
-                  </p>
-                </div>
+                {user?.role === 'admin' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-zinc-900 mb-2">
+                      Template de Fluxo
+                    </label>
+                    <select
+                      value={selectedTemplateId || ""}
+                      onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-zinc-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                    >
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[10px] text-zinc-500">
+                      O template define o prompt da IA e a estrutura do fluxo.
+                    </p>
+                  </div>
+                )}
 
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-zinc-900 mb-2">

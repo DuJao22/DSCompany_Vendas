@@ -853,25 +853,27 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                     </div>
                   )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-emerald-900 mb-1">
-                    Modelo de Template (Fluxo)
-                  </label>
-                  <select
-                    value={selectedTemplateId}
-                    onChange={(e) => setSelectedTemplateId(e.target.value)}
-                    className="w-full focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
-                  >
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-emerald-700">
-                    Selecione o modelo de prompt e fluxo que será usado para gerar o site.
-                  </p>
-                </div>
+                {user?.role === 'admin' && (
+                  <div>
+                    <label className="block text-sm font-medium text-emerald-900 mb-1">
+                      Modelo de Template (Fluxo)
+                    </label>
+                    <select
+                      value={selectedTemplateId}
+                      onChange={(e) => setSelectedTemplateId(e.target.value)}
+                      className="w-full focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                    >
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-emerald-700">
+                      Selecione o modelo de prompt e fluxo que será usado para gerar o site.
+                    </p>
+                  </div>
+                )}
                 {user?.role === 'admin' && (
                   <div>
                     <div className="flex justify-between items-center mb-1">
