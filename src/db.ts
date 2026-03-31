@@ -119,6 +119,13 @@ async function initializeSchema() {
       // Column already exists, ignore
     }
 
+    // Add gemini_api_key column to users if it doesn't exist
+    try {
+      await db.sql`ALTER TABLE users ADD COLUMN gemini_api_key TEXT`;
+    } catch (e) {
+      // Column already exists, ignore
+    }
+
     // Add full_data column to sites if it doesn't exist
     try {
       await db.sql`ALTER TABLE sites ADD COLUMN full_data TEXT`;

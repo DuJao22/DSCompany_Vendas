@@ -185,7 +185,7 @@ export default function CreateSite() {
         console.error("Error fetching settings:", e);
       }
 
-      if (!apiKey) {
+      if (!apiKey && user?.role === 'admin') {
         // Fallback to environment variable
         apiKey =
           import.meta.env.VITE_GEMINI_API_KEY ||
@@ -839,7 +839,7 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                   <p className="text-xs text-emerald-800">
                     <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
                   </p>
-                  {geminiUsage && (
+                  {geminiUsage && user?.role === "admin" && (
                     <div className="mt-2 pt-2 border-t border-emerald-200/60">
                       <p className="text-xs font-medium text-emerald-900">
                         Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições

@@ -148,7 +148,6 @@ export default function SettingsPage() {
           )}
 
           <div className="space-y-6">
-            {user?.role === "admin" && (
               <div>
                 <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-2">
                   <Key className="w-5 h-5 text-emerald-600" />
@@ -157,6 +156,7 @@ export default function SettingsPage() {
                 <p className="mb-4 text-sm text-zinc-500">
                   Para que o sistema consiga extrair dados dos links do Google Maps, é
                   necessário fornecer uma chave de API válida do Google Gemini.
+                  {user?.role !== "admin" && " Como usuário comum, você pode configurar sua própria chave pessoal aqui."}
                 </p>
                 <label
                   htmlFor="apiKey"
@@ -191,7 +191,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-blue-800 mb-2">
                     <strong>Limites da Camada Gratuita:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong>, com um limite de <strong>15 requisições por minuto</strong>.
                   </p>
-                  {geminiUsage && (
+                  {geminiUsage && user?.role === "admin" && (
                     <div className="mb-2 pt-2 border-t border-blue-200">
                       <p className="text-xs font-medium text-blue-900">
                         Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
@@ -213,7 +213,6 @@ export default function SettingsPage() {
                   </p>
                 </div>
               </div>
-            )}
 
             {user?.role === "admin" && (
               <div className="pt-6 border-t border-zinc-200">
@@ -247,44 +246,46 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <div className={user?.role === "admin" ? "pt-6 border-t border-zinc-200" : ""}>
-              <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-4">
-                <Key className="w-5 h-5 text-emerald-600" />
-                Sua Chave de API Externa (Webhook)
-              </h3>
-              <label
-                htmlFor="webhookKey"
-                className="block text-sm font-medium text-zinc-700"
-              >
-                Token de Autenticação (x-api-key)
-              </label>
-              <div className="mt-1 flex rounded-md shadow-sm">
-                <input
-                  type="text"
-                  name="webhookKey"
-                  id="webhookKey"
-                  value={user?.api_key || ""}
-                  readOnly
-                  className="focus:ring-emerald-500 focus:border-emerald-500 flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-zinc-300 px-4 py-2 border bg-zinc-50 text-zinc-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (user?.api_key) {
-                      navigator.clipboard.writeText(user.api_key);
-                      alert("Chave copiada!");
-                    }
-                  }}
-                  className="-ml-px relative inline-flex items-center space-x-2 px-4 py-2 border border-zinc-300 text-sm font-medium rounded-r-md text-zinc-700 bg-zinc-50 hover:bg-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+            {user?.role === "admin" && (
+              <div className="pt-6 border-t border-zinc-200">
+                <h3 className="text-lg font-medium text-zinc-900 flex items-center gap-2 mb-4">
+                  <Key className="w-5 h-5 text-emerald-600" />
+                  Sua Chave de API Externa (Webhook)
+                </h3>
+                <label
+                  htmlFor="webhookKey"
+                  className="block text-sm font-medium text-zinc-700"
                 >
-                  Copiar
-                </button>
+                  Token de Autenticação (x-api-key)
+                </label>
+                <div className="mt-1 flex rounded-md shadow-sm">
+                  <input
+                    type="text"
+                    name="webhookKey"
+                    id="webhookKey"
+                    value={user?.api_key || ""}
+                    readOnly
+                    className="focus:ring-emerald-500 focus:border-emerald-500 flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-zinc-300 px-4 py-2 border bg-zinc-50 text-zinc-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (user?.api_key) {
+                        navigator.clipboard.writeText(user.api_key);
+                        alert("Chave copiada!");
+                      }
+                    }}
+                    className="-ml-px relative inline-flex items-center space-x-2 px-4 py-2 border border-zinc-300 text-sm font-medium rounded-r-md text-zinc-700 bg-zinc-50 hover:bg-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <p className="mt-2 text-sm text-zinc-500">
+                  Esta é a sua chave exclusiva. Use-a no cabeçalho{" "}
+                  <code>x-api-key</code> para autenticar requisições externas.
+                </p>
               </div>
-              <p className="mt-2 text-sm text-zinc-500">
-                Esta é a sua chave exclusiva. Use-a no cabeçalho{" "}
-                <code>x-api-key</code> para autenticar requisições externas.
-              </p>
-            </div>
+            )}
           </div>
 
           <div className="mt-8 flex justify-end">

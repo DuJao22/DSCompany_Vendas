@@ -671,7 +671,7 @@ export default function SiteList() {
                 endpoint.
               </p>
               
-              {geminiUsage && (
+              {geminiUsage && user?.role === "admin" && (
                 <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg p-3">
                   <p className="text-xs font-medium text-blue-900 mb-1">
                     Uso da API Gemini hoje: {geminiUsage.count} / {geminiUsage.limit} requisições

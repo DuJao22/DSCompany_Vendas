@@ -109,6 +109,19 @@ app.get('/api/settings', authenticateToken, async (req: any, res) => {
       acc[curr.key] = curr.value;
       return acc;
     }, {});
+
+    // If regular user, override gemini_api_key with their own key if it exists
+    if (req.user.role !== 'admin') {
+      const userRes = await db.sql`SELECT gemini_api_key FROM users WHERE id = ${req.user.id}`;
+      if (userRes[0] && userRes[0].gemini_api_key) {
+        settingsMap.gemini_api_key = userRes[0].gemini_api_key;
+      } else {
+        settingsMap.gemini_api_key = ''; // Hide global key from regular users
+      }
+      // Hide default_endpoint from regular users
+      delete settingsMap.default_endpoint;
+    }
+
     res.json(settingsMap);
   } catch (error) {
     console.error('Settings error:', error);
@@ -204,6 +217,15 @@ app.post('/api/settings', authenticateToken, async (req: any, res) => {
   const { gemini_api_key, default_endpoint } = req.body;
   
   try {
+    if (req.user.role !== 'admin') {
+      // Regular user can only update their own gemini_api_key
+      if (gemini_api_key !== undefined) {
+        await db.sql`UPDATE users SET gemini_api_key = ${gemini_api_key} WHERE id = ${req.user.id}`;
+      }
+      return res.json({ success: true });
+    }
+
+    // Admin logic
     if (gemini_api_key !== undefined) {
       await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_api_key', ${gemini_api_key}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
       // Reset usage when key changes
@@ -546,19 +568,26 @@ app.post('/api/analyze-link', async (req: any, res: any) => {
   const apiKeyHeader = req.headers['x-api-key'];
   
   let isAuthenticated = false;
+  let requestUser: any = null;
   
   if (apiKeyHeader) {
      // Check if it matches a user's API key
-     const results = await db.sql`SELECT id FROM users WHERE api_key = ${apiKeyHeader}`;
+     const results = await db.sql`SELECT id, role, gemini_api_key FROM users WHERE api_key = ${apiKeyHeader}`;
      const user = results[0];
      if (user) {
        isAuthenticated = true;
+       requestUser = user;
      }
   } else if (authHeader) {
      const token = authHeader.split(' ')[1];
      try {
-       jwt.verify(token, JWT_SECRET);
-       isAuthenticated = true;
+       const decoded: any = jwt.verify(token, JWT_SECRET);
+       const results = await db.sql`SELECT id, role, gemini_api_key FROM users WHERE id = ${decoded.id}`;
+       const user = results[0];
+       if (user) {
+         isAuthenticated = true;
+         requestUser = user;
+       }
      } catch (e) {
        // ignore
      }
@@ -582,7 +611,14 @@ app.post('/api/analyze-link', async (req: any, res: any) => {
       return acc;
     }, {} as any);
 
-    if (settingsMap.gemini_api_key) {
+    // If the request is authenticated, check if the user has a personal key
+    if (requestUser && requestUser.role !== 'admin' && requestUser.gemini_api_key) {
+      geminiApiKey = requestUser.gemini_api_key;
+      console.log("Using personal API key from user settings");
+    }
+
+    // Fallback to global settings if no personal key is set
+    if (!geminiApiKey && settingsMap.gemini_api_key) {
       geminiApiKey = settingsMap.gemini_api_key;
       console.log("Using API key from database settings");
     }
@@ -595,7 +631,7 @@ app.post('/api/analyze-link', async (req: any, res: any) => {
     }
 
     if (!geminiApiKey) {
-      return res.status(500).json({ error: 'Chave da API do Gemini não configurada no servidor.' });
+      return res.status(500).json({ error: 'Chave da API do Gemini não configurada. Por favor, configure na engrenagem.' });
     }
 
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
