@@ -39,11 +39,27 @@ export default function CreateSite() {
   const [processLogs, setProcessLogs] = useState<
     { time: string; message: string; type: "info" | "success" | "error" }[]
   >([]);
+  const [geminiUsage, setGeminiUsage] = useState<{ count: number; limit: number } | null>(null);
 
   useEffect(() => {
     fetchTemplates();
     fetchSettings();
+    fetchGeminiUsage();
   }, []);
+
+  const fetchGeminiUsage = async () => {
+    try {
+      const res = await fetch('/api/gemini-usage', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeminiUsage(data);
+      }
+    } catch (e) {
+      console.error('Error fetching gemini usage:', e);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -189,6 +205,8 @@ export default function CreateSite() {
         return;
       }
 
+      apiKey = apiKey.trim();
+
       // 3. Analyze with AI
       addLog("Iniciando extração de dados com IA (Gemini)...", "info");
       const ai = new GoogleGenAI({ apiKey: apiKey });
@@ -225,6 +243,17 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
           // A IA consegue extrair os dados diretamente da URL expandida.
         },
       });
+
+      // Increment usage after successful call
+      try {
+        await fetch('/api/gemini-usage/increment', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        fetchGeminiUsage(); // Refresh usage display
+      } catch (e) {
+        console.error('Error incrementing usage:', e);
+      }
 
       if (response.text) {
         let extractedData;
@@ -439,6 +468,12 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
       ) {
         friendlyError =
           "Chave de API inválida. Por favor, verifique a chave configurada nas Configurações.";
+      } else if (
+        friendlyError.includes("leaked") ||
+        friendlyError.includes("PERMISSION_DENIED")
+      ) {
+        friendlyError =
+          "A chave de API configurada foi reportada como vazada ou bloqueada pelo Google. Por favor, gere uma nova chave no Google AI Studio e atualize nas Configurações do painel.";
       }
 
       addLog(`Erro no processo: ${friendlyError}`, "error");
@@ -804,6 +839,19 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                   <p className="text-xs text-emerald-800">
                     <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
                   </p>
+                  {geminiUsage && (
+                    <div className="mt-2 pt-2 border-t border-emerald-200/60">
+                      <p className="text-xs font-medium text-emerald-900">
+                        Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
+                      </p>
+                      <div className="w-full bg-emerald-200/50 rounded-full h-1.5 mt-1">
+                        <div 
+                          className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-emerald-600'}`} 
+                          style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-emerald-900 mb-1">

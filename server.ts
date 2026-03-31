@@ -206,6 +206,10 @@ app.post('/api/settings', authenticateToken, async (req: any, res) => {
   try {
     if (gemini_api_key !== undefined) {
       await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_api_key', ${gemini_api_key}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+      // Reset usage when key changes
+      const today = new Date().toISOString().split('T')[0];
+      await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_date', ${today}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+      await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_count', '0') ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
     }
     
     if (default_endpoint !== undefined) {
@@ -216,6 +220,55 @@ app.post('/api/settings', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error saving settings:', error);
     res.status(500).json({ error: 'Erro ao salvar configurações' });
+  }
+});
+
+// Get Gemini API usage
+app.get('/api/gemini-usage', authenticateToken, async (req: any, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const usageDateRes = await db.sql`SELECT value FROM settings WHERE key = 'gemini_usage_date'`;
+    const usageCountRes = await db.sql`SELECT value FROM settings WHERE key = 'gemini_usage_count'`;
+    
+    let usageDate = usageDateRes[0]?.value || '';
+    let usageCount = parseInt(usageCountRes[0]?.value || '0', 10);
+    
+    if (usageDate !== today) {
+      usageCount = 0;
+      await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_date', ${today}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+      await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_count', '0') ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+    }
+    
+    res.json({ count: usageCount, limit: 1500 });
+  } catch (error) {
+    console.error('Error fetching gemini usage:', error);
+    res.status(500).json({ error: 'Erro ao buscar uso da API' });
+  }
+});
+
+// Increment Gemini API usage
+app.post('/api/gemini-usage/increment', authenticateToken, async (req: any, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const usageDateRes = await db.sql`SELECT value FROM settings WHERE key = 'gemini_usage_date'`;
+    const usageCountRes = await db.sql`SELECT value FROM settings WHERE key = 'gemini_usage_count'`;
+    
+    let usageDate = usageDateRes[0]?.value || '';
+    let usageCount = parseInt(usageCountRes[0]?.value || '0', 10);
+    
+    if (usageDate !== today) {
+      usageCount = 1;
+      await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_date', ${today}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+    } else {
+      usageCount += 1;
+    }
+    
+    await db.sql`INSERT INTO settings (key, value) VALUES ('gemini_usage_count', ${usageCount.toString()}) ON CONFLICT(key) DO UPDATE SET value = excluded.value`;
+    
+    res.json({ count: usageCount, limit: 1500 });
+  } catch (error) {
+    console.error('Error incrementing gemini usage:', error);
+    res.status(500).json({ error: 'Erro ao incrementar uso da API' });
   }
 });
 

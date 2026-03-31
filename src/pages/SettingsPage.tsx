@@ -13,10 +13,26 @@ export default function SettingsPage() {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [geminiUsage, setGeminiUsage] = useState<{ count: number; limit: number } | null>(null);
 
   useEffect(() => {
     fetchSettings();
+    fetchGeminiUsage();
   }, []);
+
+  const fetchGeminiUsage = async () => {
+    try {
+      const res = await fetch('/api/gemini-usage', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeminiUsage(data);
+      }
+    } catch (e) {
+      console.error('Error fetching gemini usage:', e);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -175,6 +191,19 @@ export default function SettingsPage() {
                   <p className="text-xs text-blue-800 mb-2">
                     <strong>Limites da Camada Gratuita:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong>, com um limite de <strong>15 requisições por minuto</strong>.
                   </p>
+                  {geminiUsage && (
+                    <div className="mb-2 pt-2 border-t border-blue-200">
+                      <p className="text-xs font-medium text-blue-900">
+                        Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
+                      </p>
+                      <div className="w-full bg-blue-200 rounded-full h-1.5 mt-1">
+                        <div 
+                          className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-blue-600'}`} 
+                          style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs text-blue-800">
                     <strong>Nota:</strong> A chave salva aqui no painel tem
                     prioridade sobre a chave configurada nas variáveis de ambiente

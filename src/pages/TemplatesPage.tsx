@@ -27,6 +27,7 @@ export default function TemplatesPage() {
   const [aiPrompt, setAiPrompt] = useState('');
   const [showAiModal, setShowAiModal] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [geminiUsage, setGeminiUsage] = useState<{ count: number; limit: number } | null>(null);
 
   const DEFAULT_FLOW_JSON = {
     "nodes": [
@@ -81,6 +82,27 @@ export default function TemplatesPage() {
   useEffect(() => {
     fetchTemplates();
   }, []);
+
+  useEffect(() => {
+    if (showAiModal) {
+      fetchGeminiUsage();
+    }
+  }, [showAiModal]);
+
+  const fetchGeminiUsage = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/gemini-usage', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeminiUsage(data);
+      }
+    } catch (e) {
+      console.error('Error fetching gemini usage:', e);
+    }
+  };
 
   if (user?.role !== 'admin') {
     return <div className="p-6 text-center text-zinc-500">Acesso negado.</div>;
@@ -190,6 +212,8 @@ export default function TemplatesPage() {
         throw new Error("Chave da API do Gemini não encontrada. Configure nas Configurações.");
       }
 
+      apiKey = apiKey.trim();
+
       const instagramCTA = `
 <div style="background: #000; color: #fff; padding: 40px 20px; text-align: center; font-family: sans-serif;">
   <p style="font-size: 14px; opacity: 0.7; margin-bottom: 10px;">Desenvolvido por</p>
@@ -227,6 +251,18 @@ Retorne APENAS o JSON puro.`,
         }
       });
 
+      // Increment usage after successful call
+      try {
+        const token = localStorage.getItem('token');
+        await fetch('/api/gemini-usage/increment', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        fetchGeminiUsage(); // Refresh usage display
+      } catch (e) {
+        console.error('Error incrementing usage:', e);
+      }
+
       const result = JSON.parse(response.text);
       setCurrentTemplate({
         name: result.name,
@@ -240,7 +276,17 @@ Retorne APENAS o JSON puro.`,
       setIsEditing(true);
     } catch (error: any) {
       console.error('Error generating template with AI:', error);
-      alert(error.message || 'Erro ao gerar template com IA. Tente novamente.');
+      let friendlyError = error.message || 'Erro ao gerar template com IA. Tente novamente.';
+      
+      if (friendlyError.includes("leaked") || friendlyError.includes("PERMISSION_DENIED")) {
+        friendlyError = "A chave de API configurada foi reportada como vazada ou bloqueada pelo Google. Por favor, gere uma nova chave no Google AI Studio e atualize nas Configurações do painel.";
+      } else if (friendlyError.includes("429") || friendlyError.includes("quota")) {
+        friendlyError = "Limite de cota atingido. A chave da API excedeu o limite de requisições.";
+      } else if (friendlyError.includes("API_KEY_INVALID")) {
+        friendlyError = "Chave de API inválida. Verifique as Configurações.";
+      }
+
+      alert(friendlyError);
     } finally {
       setIsGenerating(false);
     }
@@ -300,6 +346,19 @@ Retorne APENAS o JSON puro.`,
                 <p className="text-xs text-blue-800">
                   <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
                 </p>
+                {geminiUsage && (
+                  <div className="mt-2 pt-2 border-t border-blue-200">
+                    <p className="text-xs font-medium text-blue-900">
+                      Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
+                    </p>
+                    <div className="w-full bg-blue-200 rounded-full h-1.5 mt-1">
+                      <div 
+                        className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-blue-600'}`} 
+                        style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
