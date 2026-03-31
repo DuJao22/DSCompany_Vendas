@@ -2,7 +2,51 @@ import { Database } from '@sqlitecloud/drivers';
 import crypto from 'crypto';
 
 const connectionString = 'sqlitecloud://cmq6frwshz.g4.sqlite.cloud:8860/DsCompany_Prospeccao.db?apikey=Dor8OwUECYmrbcS5vWfsdGpjCpdm9ecSDJtywgvRw8k';
-const db = new Database(connectionString);
+
+class DBWrapper {
+  private db: Database;
+
+  constructor() {
+    this.db = new Database(connectionString);
+  }
+
+  async sql(strings: TemplateStringsArray, ...values: any[]) {
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        return await this.db.sql(strings, ...values);
+      } catch (error: any) {
+        const isConnectionError = 
+          error.message?.includes('Connection unavailable') || 
+          error.errorCode === 'ERR_CONNECTION_NOT_ESTABLISHED' ||
+          error.message?.includes('disconnected') ||
+          error.message?.includes('socket') ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('closed') ||
+          error.message?.includes('not established') ||
+          error.message?.includes('network');
+
+        if (isConnectionError && retries > 1) {
+          console.warn(`SQLiteCloud connection lost. Reconnecting... (Retries left: ${retries - 1})`);
+          try {
+            this.db.close();
+          } catch (e) {
+            // Ignore close errors
+          }
+          
+          // Wait before reconnecting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          this.db = new Database(connectionString);
+          retries--;
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+}
+
+const db = new DBWrapper();
 
 // Initialize schema asynchronously
 async function initializeSchema() {

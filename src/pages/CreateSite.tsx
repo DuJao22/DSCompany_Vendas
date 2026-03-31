@@ -341,7 +341,7 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
           addLog("Usando template padrão (fallback)", "info");
         }
 
-        const flowJson = generateFlowJson(promptText, extractedData.name, saveData.id, extractedData, flowStructure);
+        const flowJson = generateFlowJson(promptText, extractedData.name, saveData.id, extractedData, flowStructure, apiKey);
         addLog("JSON do Fluxo gerado com sucesso.", "success");
 
         let endpointSuccess = false;

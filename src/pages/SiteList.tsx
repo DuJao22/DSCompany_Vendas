@@ -95,10 +95,27 @@ export default function SiteList() {
     }
   };
 
+  const [geminiUsage, setGeminiUsage] = useState<{ count: number; limit: number } | null>(null);
+
+  const fetchGeminiUsage = async () => {
+    try {
+      const res = await fetch('/api/gemini-usage', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGeminiUsage(data);
+      }
+    } catch (e) {
+      console.error('Error fetching gemini usage:', e);
+    }
+  };
+
   useEffect(() => {
     fetchSites();
     fetchTemplates();
     fetchSettings();
+    fetchGeminiUsage();
   }, [token]);
 
   const fetchSettings = async () => {
@@ -303,6 +320,21 @@ export default function SiteList() {
       addLog("Gerando prompt e JSON do Fluxo com base no template selecionado...", "info");
       const selectedTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
       
+      let apiKey = "";
+      try {
+        const settingsRes = await fetch('/api/settings', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (settingsRes.ok) {
+          const settings = await settingsRes.json();
+          if (settings.gemini_api_key) {
+            apiKey = settings.gemini_api_key;
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching settings:", e);
+      }
+
       const promptText = selectedTemplate 
         ? generatePromptWithTemplate(data, endpointModal.site.map_link || "", selectedTemplate.prompt_template)
         : generatePrompt(data, endpointModal.site.map_link || "");
@@ -312,7 +344,8 @@ export default function SiteList() {
         endpointModal.site.name, 
         endpointModal.site.id, 
         data,
-        selectedTemplate?.flow_structure
+        selectedTemplate?.flow_structure,
+        apiKey
       );
       
       setGeneratedFlowJson(flowJson);
@@ -359,6 +392,16 @@ export default function SiteList() {
             "JSON do Fluxo enviado com sucesso para o endpoint.",
             "success",
           );
+          // Increment usage after successful send
+          try {
+            await fetch('/api/gemini-usage/increment', {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchGeminiUsage();
+          } catch (e) {
+            console.error('Error incrementing usage:', e);
+          }
           // Update status to 'produção' after successful send
           await handleUpdateStatus(endpointModal.site.id, "produção");
         } else {
@@ -627,6 +670,21 @@ export default function SiteList() {
                 <strong>{endpointModal.site.name}</strong> e enviá-lo para um
                 endpoint.
               </p>
+              
+              {geminiUsage && (
+                <div className="mb-6 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  <p className="text-xs font-medium text-blue-900 mb-1">
+                    Uso da API Gemini hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
+                  </p>
+                  <div className="w-full bg-blue-200/50 rounded-full h-1.5">
+                    <div 
+                      className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-blue-600'}`} 
+                      style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
               <form onSubmit={handleSendToEndpoint}>
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-zinc-900 mb-2">
@@ -746,6 +804,21 @@ export default function SiteList() {
                         }
                         const data = await res.json();
 
+                        let apiKey = "";
+                        try {
+                          const settingsRes = await fetch('/api/settings', {
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          if (settingsRes.ok) {
+                            const settings = await settingsRes.json();
+                            if (settings.gemini_api_key) {
+                              apiKey = settings.gemini_api_key;
+                            }
+                          }
+                        } catch (e) {
+                          console.error("Error fetching settings:", e);
+                        }
+
                         const promptText = selectedTemplate 
                           ? generatePromptWithTemplate(data, endpointModal.site.map_link || "", selectedTemplate.prompt_template)
                           : generatePrompt(data, endpointModal.site.map_link || "");
@@ -755,12 +828,24 @@ export default function SiteList() {
                           endpointModal.site.name, 
                           endpointModal.site.id, 
                           data,
-                          selectedTemplate?.flow_structure
+                          selectedTemplate?.flow_structure,
+                          apiKey
                         );
                         
                         setGeneratedFlowJson(flowJson);
                         setShowFlowJson(true);
                         addLog(`Template utilizado: ${selectedTemplate?.name || "Padrão"}`, "success");
+                        
+                        // Increment usage since they generated the flow
+                        try {
+                          await fetch('/api/gemini-usage/increment', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          await fetchGeminiUsage();
+                        } catch (e) {
+                          console.error('Error incrementing usage:', e);
+                        }
                       }
                     }}
                     className="inline-flex justify-center items-center py-2 px-4 border border-zinc-300 shadow-sm text-sm font-medium rounded-md text-zinc-700 bg-white hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"

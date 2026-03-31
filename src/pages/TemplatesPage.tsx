@@ -226,20 +226,25 @@ export default function TemplatesPage() {
       const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Você é um especialista em automação e design de landing pages.
-Crie um template de prospecção para o sistema.
+        contents: `Você é um Engenheiro de Prompts Sênior, especialista em automação (n8n), Inteligência Artificial e Web Design de Alta Conversão (CRO).
+Sua missão é criar o MELHOR e mais PROFISSIONAL template de prospecção para o sistema.
 O usuário quer um template focado em: "${aiPrompt}"
 
-REGRAS OBRIGATÓRIAS PARA O PROMPT GERADO:
-1. O prompt deve exigir que a página seja MOBILE FIRST.
-2. O prompt deve exigir que a página inclua CRÉDITOS à DS Company e um link para o Instagram @dscompany1_.
-3. O prompt deve ser EXTREMAMENTE RÍGIDO sobre retornar APENAS HTML puro, sem explicações ou markdown.
+REGRAS OBRIGATÓRIAS PARA O PROMPT GERADO (prompt_template):
+1. O prompt gerado deve instruir a IA final a criar uma Landing Page de ALTA CONVERSÃO, com design moderno, premium e impecável.
+2. Exija o uso de HTML5 semântico e CSS3 moderno (pode usar Tailwind CSS via CDN ou CSS interno muito bem estruturado).
+3. Exija design MOBILE FIRST, totalmente responsivo e otimizado para velocidade.
+4. O prompt deve pedir seções claras: Hero (com CTA forte e persuasivo), Sobre a Empresa, Serviços/Produtos (com ícones ou cards), Prova Social/Benefícios, e Rodapé.
+5. Exija o uso de cores harmoniosas, tipografia moderna (importando do Google Fonts, ex: Inter, Poppins) e bom uso de espaço em branco (whitespace).
+6. O prompt deve exigir que a página inclua CRÉDITOS à DS Company e um link para o Instagram @dscompany1_.
+7. O prompt deve ser EXTREMAMENTE RÍGIDO sobre retornar APENAS HTML puro, sem explicações, sem blocos de código markdown (\`\`\`html).
+8. O prompt deve orientar a IA a usar os dados fornecidos nos placeholders para criar textos persuasivos (copywriting) focados em vendas e conversão.
 
 Retorne um JSON com o seguinte formato:
 {
-  "name": "Nome Sugerido para o Template",
-  "prompt_template": "O prompt detalhado que será enviado ao Gemini para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado. No final do prompt, inclua a instrução para adicionar este HTML de créditos: ${instagramCTA.replace(/"/g, "'")}",
-  "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders. Se não houver necessidade de algo diferente, use a estrutura padrão fornecida abaixo."
+  "name": "Nome Sugerido para o Template (Curto e Profissional)",
+  "prompt_template": "O prompt detalhado, longo e extremamente específico que será enviado ao agente de IA para gerar o HTML da landing page. Use placeholders como \${data.name}, \${data.address}, \${data.city}, \${data.phone}, \${data.description}, \${data.services}, \${mapLink} onde apropriado. Detalhe as exigências de design de forma minuciosa, exigindo sombras suaves, bordas arredondadas, hover effects nos botões e um layout limpo. No final do prompt, inclua a instrução para adicionar este HTML de créditos: ${instagramCTA.replace(/"/g, "'")}",
+  "flow_structure": "A estrutura JSON do fluxo n8n/flow. Use {{prompt}} e {{siteName}} como placeholders. Mantenha a estrutura padrão fornecida abaixo."
 }
 
 A estrutura padrão do flow_structure é:
