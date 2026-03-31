@@ -7,9 +7,14 @@ import bcrypt from 'bcryptjs';
 import db from './src/db.js';
 import fs from 'fs';
 import crypto from 'crypto';
+import { exec } from 'child_process';
 import { GoogleGenAI, Type } from '@google/genai';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-prod';
+
+// User existence cache to reduce DB load
+const userCache = new Map<string | number, { timestamp: number; exists: boolean }>();
+const USER_CACHE_TTL = 60 * 1000; // 1 minute
 
 const app = express();
 const PORT = 3000;
@@ -44,7 +49,7 @@ initAdmin();
 // --- API Routes ---
 
 // Auth Middleware
-const authenticateToken = async (req: any, res: any, next: any) => {
+const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
@@ -54,16 +59,30 @@ const authenticateToken = async (req: any, res: any, next: any) => {
     if (err) return res.sendStatus(403);
     
     try {
+      // Check cache first
+      const cached = userCache.get(user.id);
+      const now = Date.now();
+      if (cached && (now - cached.timestamp < USER_CACHE_TTL)) {
+        if (!cached.exists) {
+          return res.status(401).json({ error: 'Usuário não encontrado ou sessão expirada. Por favor, faça login novamente.' });
+        }
+        req.user = user;
+        return next();
+      }
+
       // Verify user still exists in DB
       const results = await db.sql`SELECT id FROM users WHERE id = ${user.id}`;
       const dbUser = results[0];
+      
+      userCache.set(user.id, { timestamp: now, exists: !!dbUser });
+
       if (!dbUser) {
         return res.status(401).json({ error: 'Usuário não encontrado ou sessão expirada. Por favor, faça login novamente.' });
       }
       
       req.user = user;
       next();
-    } catch (dbErr) {
+    } catch (dbErr: any) {
       console.error('Auth middleware DB error:', dbErr);
       return res.sendStatus(500);
     }
@@ -310,9 +329,12 @@ app.get('/api/stats', authenticateToken, async (req: any, res) => {
       userProgress: userProgressResults[0].count,
       userGoal: userGoalResults[0]?.daily_goal || 0
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in /api/stats:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const message = error.message?.includes('Maximum number of allowed connections reached') 
+      ? 'O banco de dados está temporariamente sobrecarregado. Por favor, tente novamente em alguns instantes.'
+      : 'Erro interno ao carregar estatísticas';
+    res.status(500).json({ error: message });
   }
 });
 
@@ -419,9 +441,12 @@ app.get('/api/sites', authenticateToken, async (req: any, res) => {
       ORDER BY s.created_at DESC
     `;
     res.json(sites);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in /api/sites:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const message = error.message?.includes('Maximum number of allowed connections reached') 
+      ? 'O banco de dados está temporariamente sobrecarregado. Por favor, tente novamente em alguns instantes.'
+      : 'Erro interno ao carregar sites';
+    res.status(500).json({ error: message });
   }
 });
 
@@ -683,16 +708,20 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
       }
     });
 
-    if (!response.text) {
-      throw new Error('A IA não retornou uma resposta válida.');
+    let responseText = '{}';
+    try {
+      responseText = response.text || '{}';
+    } catch (e: any) {
+      console.error('Error getting response text:', e);
+      throw new Error('A resposta da IA foi bloqueada ou retornou vazia. Tente um link diferente.');
     }
 
     let result;
     try {
-      const cleanText = response.text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const cleanText = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
       result = JSON.parse(cleanText);
     } catch (parseError) {
-      console.error("JSON Parse Error:", parseError, "Raw text:", response.text);
+      console.error("JSON Parse Error:", parseError, "Raw text:", responseText);
       throw new Error("A resposta da IA não estava em um formato válido. Tente novamente.");
     }
     
@@ -753,6 +782,51 @@ app.delete('/api/sites/:id', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error deleting site:', error);
     res.status(500).json({ error: 'Erro ao excluir site' });
+  }
+});
+
+// Generate database export files
+app.post('/api/admin/generate-export', authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  try {
+    // Run both scripts sequentially
+    console.log('Starting manual database export generation...');
+    
+    exec('npx tsx scripts/export_db.ts && npx tsx scripts/generate_sqlite_file_pure_js.ts', (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Export generation error: ${error.message}`);
+        return res.status(500).json({ error: 'Erro ao gerar arquivos de exportação' });
+      }
+      console.log(`Export generation output: ${stdout}`);
+      res.json({ success: true });
+    });
+  } catch (error) {
+    console.error('Error in generate-export route:', error);
+    res.status(500).json({ error: 'Erro interno ao processar exportação' });
+  }
+});
+
+// Download database export
+app.get('/api/admin/export-db', authenticateToken, async (req: any, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  const format = req.query.format || 'json';
+  let fileName = 'database_export.json';
+  
+  if (format === 'sqlite') {
+    fileName = 'database.sqlite';
+  }
+
+  const filePath = path.join(process.cwd(), fileName);
+  if (fs.existsSync(filePath)) {
+    res.download(filePath, fileName);
+  } else {
+    res.status(404).json({ error: `Arquivo de exportação (${format}) não encontrado. Por favor, gere o arquivo primeiro.` });
   }
 });
 

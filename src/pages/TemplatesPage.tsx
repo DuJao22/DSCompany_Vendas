@@ -268,7 +268,29 @@ Retorne APENAS o JSON puro.`,
         console.error('Error incrementing usage:', e);
       }
 
-      const result = JSON.parse(response.text);
+      let responseText = '{}';
+      try {
+        responseText = response.text || '{}';
+      } catch (e: any) {
+        console.error('Error getting response text:', e);
+        throw new Error('A resposta da IA foi bloqueada ou retornou vazia. Tente um prompt diferente.');
+      }
+      
+      // Remove markdown code blocks if present
+      responseText = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e: any) {
+        console.error('Error parsing JSON:', e, 'Raw text:', responseText);
+        throw new Error('A IA não retornou um formato válido. Tente novamente.');
+      }
+
+      if (!result.name || !result.prompt_template) {
+        throw new Error('A IA não retornou todos os campos necessários (nome e prompt).');
+      }
+
       setCurrentTemplate({
         name: result.name,
         prompt_template: result.prompt_template,

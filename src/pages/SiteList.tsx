@@ -1088,13 +1088,15 @@ export default function SiteList() {
                       </span>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => setEndpointModal({ isOpen: true, site })}
-                        className="text-blue-600 hover:text-blue-900 flex items-center p-1"
-                        title="Regenerar / Enviar"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </button>
+                      {user?.role === "admin" && (
+                        <button
+                          onClick={() => setEndpointModal({ isOpen: true, site })}
+                          className="text-blue-600 hover:text-blue-900 flex items-center p-1"
+                          title="Regenerar / Enviar"
+                        >
+                          <RefreshCw className="w-5 h-5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setViewModal({ isOpen: true, site })}
                         className="text-zinc-600 hover:text-zinc-900 flex items-center p-1"

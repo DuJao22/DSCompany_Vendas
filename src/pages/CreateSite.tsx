@@ -41,6 +41,17 @@ export default function CreateSite() {
   >([]);
   const [geminiUsage, setGeminiUsage] = useState<{ count: number; limit: number } | null>(null);
 
+  const [inputMode, setInputMode] = useState<"auto" | "manual">("auto");
+  const [manualData, setManualData] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    city: "",
+    description: "",
+    services: "",
+    niche: ""
+  });
+
   useEffect(() => {
     fetchTemplates();
     fetchSettings();
@@ -106,57 +117,25 @@ export default function CreateSite() {
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mapsLink) {
+    if (inputMode === "auto" && !mapsLink) {
       setError("Por favor, insira um link do Google Maps.");
+      return;
+    }
+    if (inputMode === "manual" && !manualData.name) {
+      setError("Por favor, insira o nome da empresa.");
       return;
     }
 
     setIsLoading(true);
     setError("");
     setProcessLogs([]);
-    addLog("Iniciando análise do link...", "info");
+    
+    let extractedData: any = null;
+    let finalUrl = mapsLink || "https://maps.google.com"; // Fallback for manual mode
+    const isUrl = finalUrl.startsWith('http://') || finalUrl.startsWith('https://');
 
     try {
-      // 1. Expand the URL if it's a short link
-      let finalUrl = mapsLink;
-      let placeNameHint = "";
-      addLog("Verificando e expandindo URL...", "info");
-      try {
-        const expandRes = await fetch("/api/expand-url", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ url: mapsLink }),
-        });
-
-        if (expandRes.status === 401 || expandRes.status === 403) {
-          logout();
-          navigate("/login");
-          throw new Error("Sessão expirada. Por favor, faça login novamente.");
-        }
-
-        if (expandRes.ok) {
-          const expandData = await expandRes.json();
-          if (expandData.url) {
-            finalUrl = expandData.url;
-            addLog("URL expandida com sucesso.", "success");
-
-            // Try to extract place name from the expanded URL
-            const match = finalUrl.match(/\/place\/([^\/]+)/);
-            if (match && match[1]) {
-              placeNameHint = decodeURIComponent(match[1].replace(/\+/g, " "));
-              addLog(`Dica de nome encontrada: ${placeNameHint}`, "info");
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Failed to expand URL, using original", e);
-        addLog("Falha ao expandir URL, usando a original.", "info");
-      }
-
-      // 2. Get API Key from settings or environment
+      // 1. Get API Key from settings or environment
       addLog("Obtendo chave da API do Gemini...", "info");
       let apiKey = "";
 
@@ -207,19 +186,65 @@ export default function CreateSite() {
 
       apiKey = apiKey.trim();
 
-      // 3. Analyze with AI
-      addLog("Iniciando extração de dados com IA (Gemini)...", "info");
-      const ai = new GoogleGenAI({ apiKey: apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Você é um especialista em extração de dados.
-Você recebeu o seguinte link do Google Maps: ${finalUrl}
-${placeNameHint ? `\nDica: O nome do estabelecimento extraído da URL parece ser "${placeNameHint}".` : ""}
+      if (inputMode === "auto") {
+        addLog("Iniciando análise do link...", "info");
+        // 2. Expand the URL if it's a short link
+        let placeNameHint = "";
+        if (isUrl) {
+          addLog("Verificando e expandindo URL...", "info");
+          try {
+            const expandRes = await fetch("/api/expand-url", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ url: mapsLink }),
+            });
+
+            if (expandRes.status === 401 || expandRes.status === 403) {
+              logout();
+              navigate("/login");
+              throw new Error("Sessão expirada. Por favor, faça login novamente.");
+            }
+
+            if (expandRes.ok) {
+              const expandData = await expandRes.json();
+              if (expandData.url) {
+                finalUrl = expandData.url;
+                addLog("URL expandida com sucesso.", "success");
+
+                // Try to extract place name from the expanded URL
+                const match = finalUrl.match(/\/place\/([^\/]+)/);
+                if (match && match[1]) {
+                  placeNameHint = decodeURIComponent(match[1].replace(/\+/g, " "));
+                  addLog(`Dica de nome encontrada: ${placeNameHint}`, "info");
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to expand URL, using original", e);
+            addLog("Falha ao expandir URL, usando a original.", "info");
+          }
+        }
+
+        // 3. Analyze with AI
+        addLog("Iniciando extração de dados com IA (Gemini)...", "info");
+        const ai = new GoogleGenAI({ apiKey: apiKey });
+        
+        const inputContext = isUrl 
+          ? `Você recebeu o seguinte link do Google Maps: ${finalUrl}\n${placeNameHint ? `Dica: O nome do estabelecimento extraído da URL parece ser "${placeNameHint}".` : ""}`
+          : `Você recebeu as seguintes informações sobre a empresa:\n"${finalUrl}"`;
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Você é um especialista em extração de dados.
+${inputContext}
 
 Sua missão é OBRIGATÓRIA:
-1. Analise cuidadosamente a URL fornecida e a dica de nome (se houver) para identificar o estabelecimento.
+1. Analise cuidadosamente as informações fornecidas para identificar o estabelecimento.
 2. Descubra EXATAMENTE qual é o estabelecimento real (nome, nicho, endereço, telefone).
-3. Se o link for genérico, quebrado, ou se você NÃO TIVER 100% DE CERTEZA de qual é o estabelecimento exato, você DEVE definir "success" como false e preencher o "errorMessage" explicando que não foi possível identificar o local e pedindo para o usuário verificar o link.
+3. Se a entrada for muito genérica, sem sentido, ou se você NÃO TIVER 100% DE CERTEZA de qual é o estabelecimento exato, você DEVE definir "success" como false e preencher o "errorMessage" explicando que não foi possível identificar o local.
 4. Se você encontrou o estabelecimento com sucesso, defina "success" as true e extraia os dados reais: Nome da empresa, telefone (apenas números com DDD), endereço completo e cidade.
 5. Identifique o NICHO exato (ex: barbearia, lanchonete, clínica, restaurante).
 6. Crie uma DESCRIÇÃO detalhada do negócio.
@@ -234,213 +259,235 @@ RETORNE APENAS UM JSON VÁLIDO com a seguinte estrutura exata (sem formatação 
   "address": "Endereço Completo",
   "city": "Cidade",
   "description": "Descrição",
-  "services": "Serviços"
+  "services": "Serviços",
+  "niche": "Nicho"
 }
 
 NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne success: false.`,
-        config: {
-          // Removido o uso de tools (googleMaps/googleSearch) pois causa erro 429 em contas gratuitas.
-          // A IA consegue extrair os dados diretamente da URL expandida.
-        },
-      });
-
-      // Increment usage after successful call
-      try {
-        await fetch('/api/gemini-usage/increment', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
+          config: {
+            // Removido o uso de tools (googleMaps/googleSearch) pois causa erro 429 em contas gratuitas.
+            // A IA consegue extrair os dados diretamente da URL expandida.
+          },
         });
-        fetchGeminiUsage(); // Refresh usage display
-      } catch (e) {
-        console.error('Error incrementing usage:', e);
+
+        // Increment usage after successful call
+        try {
+          await fetch('/api/gemini-usage/increment', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          fetchGeminiUsage(); // Refresh usage display
+        } catch (e) {
+          console.error('Error incrementing usage:', e);
+        }
+
+        let responseText = '{}';
+        try {
+          responseText = response.text || '{}';
+        } catch (e: any) {
+          console.error('Error getting response text:', e);
+          throw new Error('A resposta da IA foi bloqueada ou retornou vazia. Tente um link diferente.');
+        }
+
+        if (responseText) {
+          try {
+            // Remove markdown formatting if present
+            const cleanText = responseText
+              .replace(/```json/gi, "")
+              .replace(/```/g, "")
+              .trim();
+            extractedData = JSON.parse(cleanText);
+            addLog("Dados extraídos e parseados com sucesso.", "success");
+          } catch (parseError) {
+            addLog("Falha ao fazer parse do JSON retornado pela IA.", "error");
+            console.error(
+              "JSON Parse Error:",
+              parseError,
+              "Raw text:",
+              responseText,
+            );
+            throw new Error(
+              "A resposta da IA não estava em um formato válido. Tente novamente.",
+            );
+          }
+
+          if (!extractedData.success) {
+            addLog("A IA não conseguiu identificar o estabelecimento.", "error");
+            setError(
+              extractedData.errorMessage ||
+                "Não foi possível identificar o estabelecimento a partir deste link. Por favor, verifique o link.",
+            );
+            setIsLoading(false);
+            return;
+          }
+        }
+      } else {
+        // Manual Mode
+        addLog("Usando dados preenchidos manualmente...", "info");
+        extractedData = {
+          success: true,
+          name: manualData.name,
+          phone: manualData.phone,
+          address: manualData.address,
+          city: manualData.city,
+          description: manualData.description,
+          services: manualData.services,
+          niche: manualData.niche
+        };
       }
 
-      if (response.text) {
-        let extractedData;
-        try {
-          // Remove markdown formatting if present
-          const cleanText = response.text
-            .replace(/```json\n?/g, "")
-            .replace(/```\n?/g, "")
-            .trim();
-          extractedData = JSON.parse(cleanText);
-          addLog("Dados extraídos e parseados com sucesso.", "success");
-        } catch (parseError) {
-          addLog("Falha ao fazer parse do JSON retornado pela IA.", "error");
-          console.error(
-            "JSON Parse Error:",
-            parseError,
-            "Raw text:",
-            response.text,
-          );
+      // 4. Save the extracted data
+      addLog("Salvando dados extraídos no banco de dados...", "info");
+      const saveRes = await fetch("/api/analyze/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          ...extractedData,
+          map_link: isUrl ? mapsLink : "",
+        }),
+      });
+
+      let saveData;
+      try {
+        saveData = await saveRes.json();
+      } catch (e) {
+        addLog("Erro ao ler resposta do salvamento.", "error");
+        throw new Error(
+          `Erro no servidor ao salvar os dados (Status: ${saveRes.status}). O servidor pode estar indisponível ou ocorreu um erro interno.`,
+        );
+      }
+
+      if (!saveRes.ok) {
+        addLog("Erro ao salvar dados no banco.", "error");
+        if (saveRes.status === 401 || saveRes.status === 403) {
+          logout();
+          navigate("/login");
           throw new Error(
-            "A resposta da IA não estava em um formato válido. Tente novamente.",
+            "Sessão expirada. Por favor, faça login novamente.",
           );
         }
+        throw new Error(saveData.error || "Erro ao salvar dados");
+      }
+      addLog("Dados salvos com sucesso no banco de dados.", "success");
 
-        if (!extractedData.success) {
-          addLog("A IA não conseguiu identificar o estabelecimento.", "error");
-          setError(
-            extractedData.errorMessage ||
-              "Não foi possível identificar o estabelecimento a partir deste link. Por favor, verifique o link.",
-          );
-          setIsLoading(false);
-          return;
-        }
+      // 5. Generate Flow JSON
+      addLog("Gerando prompt Mobile First e JSON do Fluxo...", "info");
+      
+      const selectedTemplate = templates.find(t => t.id.toString() === selectedTemplateId);
+      let promptText = "";
+      let flowStructure = "";
+      
+      if (selectedTemplate) {
+        promptText = fillTemplate(selectedTemplate.prompt_template, extractedData, isUrl ? mapsLink : "");
+        flowStructure = selectedTemplate.flow_structure;
+        addLog(`Usando template: ${selectedTemplate.name}`, "info");
+      } else {
+        promptText = generatePrompt(extractedData, isUrl ? mapsLink : "");
+        addLog("Usando template padrão (fallback)", "info");
+      }
 
-        // 4. Save the extracted data
-        addLog("Salvando dados extraídos no banco de dados...", "info");
-        const saveRes = await fetch("/api/analyze/save", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            ...extractedData,
-            map_link: mapsLink,
-          }),
-        });
+      const flowJson = generateFlowJson(promptText, extractedData.name, saveData.id, extractedData, flowStructure, apiKey);
+      addLog("JSON do Fluxo gerado com sucesso.", "success");
 
-        let saveData;
+      let endpointSuccess = false;
+      let endpointError = "";
+
+      // 6. Send to Endpoint if provided
+      if (endpointUrl) {
+        addLog(
+          `Enviando JSON do Fluxo para o endpoint: ${endpointUrl}...`,
+          "info",
+        );
+        addLog(
+          `Payload que será enviado:\n${JSON.stringify(flowJson, null, 2)}`,
+          "info"
+        );
         try {
-          saveData = await saveRes.json();
-        } catch (e) {
-          addLog("Erro ao ler resposta do salvamento.", "error");
-          throw new Error(
-            `Erro no servidor ao salvar os dados (Status: ${saveRes.status}). O servidor pode estar indisponível ou ocorreu um erro interno.`,
-          );
-        }
+          const endpointRes = await fetch("/api/proxy-webhook", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              url: endpointUrl,
+              payload: flowJson,
+              method: endpointMethod,
+            }),
+          });
 
-        if (!saveRes.ok) {
-          addLog("Erro ao salvar dados no banco.", "error");
-          if (saveRes.status === 401 || saveRes.status === 403) {
+          if (endpointRes.status === 401 || endpointRes.status === 403) {
             logout();
             navigate("/login");
             throw new Error(
               "Sessão expirada. Por favor, faça login novamente.",
             );
           }
-          throw new Error(saveData.error || "Erro ao salvar dados");
-        }
-        addLog("Dados salvos com sucesso no banco de dados.", "success");
 
-        // 5. Generate Flow JSON
-        addLog("Gerando prompt Mobile First e JSON do Fluxo...", "info");
-        
-        const selectedTemplate = templates.find(t => t.id.toString() === selectedTemplateId);
-        let promptText = "";
-        let flowStructure = "";
-        
-        if (selectedTemplate) {
-          promptText = fillTemplate(selectedTemplate.prompt_template, extractedData, mapsLink);
-          flowStructure = selectedTemplate.flow_structure;
-          addLog(`Usando template: ${selectedTemplate.name}`, "info");
-        } else {
-          promptText = generatePrompt(extractedData, mapsLink);
-          addLog("Usando template padrão (fallback)", "info");
-        }
-
-        const flowJson = generateFlowJson(promptText, extractedData.name, saveData.id, extractedData, flowStructure, apiKey);
-        addLog("JSON do Fluxo gerado com sucesso.", "success");
-
-        let endpointSuccess = false;
-        let endpointError = "";
-
-        // 6. Send to Endpoint if provided
-        if (endpointUrl) {
-          addLog(
-            `Enviando JSON do Fluxo para o endpoint: ${endpointUrl}...`,
-            "info",
-          );
-          addLog(
-            `Payload que será enviado:\n${JSON.stringify(flowJson, null, 2)}`,
-            "info"
-          );
-          try {
-            const endpointRes = await fetch("/api/proxy-webhook", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                url: endpointUrl,
-                payload: flowJson,
-                method: endpointMethod,
-              }),
-            });
-
-            if (endpointRes.status === 401 || endpointRes.status === 403) {
-              logout();
-              navigate("/login");
-              throw new Error(
-                "Sessão expirada. Por favor, faça login novamente.",
+          if (endpointRes.ok) {
+            const resData = await endpointRes.json();
+            if (resData.success) {
+              endpointSuccess = true;
+              addLog(
+                "JSON do Fluxo enviado com sucesso para o endpoint.",
+                "success",
               );
-            }
 
-            if (endpointRes.ok) {
-              const resData = await endpointRes.json();
-              if (resData.success) {
-                endpointSuccess = true;
-                addLog(
-                  "JSON do Fluxo enviado com sucesso para o endpoint.",
-                  "success",
-                );
-
-                // Update status to produção
-                try {
-                  await fetch(`/api/sites/${saveData.id}/status`, {
-                    method: "PATCH",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify({ status: "produção" }),
-                  });
-                  addLog("Status atualizado para Produção.", "success");
-                } catch (statusErr) {
-                  console.error("Error updating status:", statusErr);
-                }
-              } else {
-                endpointError = resData.error || "Erro desconhecido no proxy";
-                addLog(
-                  `Erro ao enviar para o endpoint: ${endpointError}`,
-                  "error",
-                );
+              // Update status to produção
+              try {
+                await fetch(`/api/sites/${saveData.id}/status`, {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                  },
+                  body: JSON.stringify({ status: "produção" }),
+                });
+                addLog("Status atualizado para Produção.", "success");
+              } catch (statusErr) {
+                console.error("Error updating status:", statusErr);
               }
             } else {
-              const resData = await endpointRes.json().catch(() => ({}));
-              endpointError =
-                resData.error || `Erro HTTP: ${endpointRes.status}`;
+              endpointError = resData.error || "Erro desconhecido no proxy";
               addLog(
                 `Erro ao enviar para o endpoint: ${endpointError}`,
                 "error",
               );
             }
-          } catch (e: any) {
-            endpointError = e.message || "Falha na conexão com o endpoint";
+          } else {
+            const resData = await endpointRes.json().catch(() => ({}));
+            endpointError =
+              resData.error || `Erro HTTP: ${endpointRes.status}`;
             addLog(
-              `Falha na conexão com o endpoint: ${endpointError}`,
+              `Erro ao enviar para o endpoint: ${endpointError}`,
               "error",
             );
           }
+        } catch (e: any) {
+          endpointError = e.message || "Falha na conexão com o endpoint";
+          addLog(
+            `Falha na conexão com o endpoint: ${endpointError}`,
+            "error",
+          );
         }
-
-        if (endpointUrl && !endpointSuccess) {
-          addLog("Processo finalizado com erro no endpoint.", "error");
-        } else {
-          addLog("Processo concluído com sucesso!", "success");
-        }
-        setSuccessData({
-          filename: saveData.filename,
-          id: saveData.id,
-          data: extractedData,
-          flowJson,
-          endpointSuccess,
-          endpointError,
-        });
       }
+
+      if (endpointUrl && !endpointSuccess) {
+        addLog("Processo finalizado com erro no endpoint.", "error");
+      } else {
+        addLog("Processo concluído com sucesso!", "success");
+      }
+      setSuccessData({
+        filename: saveData.filename,
+        id: saveData.id,
+        data: extractedData,
+        flowJson,
+        endpointSuccess,
+        endpointError,
+      });
     } catch (err: any) {
       console.error(err);
 
@@ -808,53 +855,163 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
       )}
 
       <form onSubmit={handleAnalyze} className="bg-white shadow rounded-lg p-6">
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-6 mb-8">
-          <div className="flex items-start">
-            <div className="flex-shrink-0 mt-1">
-              <Sparkles className="h-6 w-6 text-emerald-600" />
-            </div>
-            <div className="ml-4 flex-1">
-              <h3 className="text-lg font-medium text-emerald-900">
-                Extração com Inteligência Artificial
-              </h3>
-              <p className="mt-1 text-sm text-emerald-700">
-                Nossa IA vai buscar os dados reais do local e estruturá-los em
-                um arquivo JSON.
-              </p>
-              <div className="mt-4 flex flex-col gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-emerald-900 mb-1">
-                    Link do Google Maps
-                  </label>
-                  <input
-                    type="url"
-                    value={mapsLink}
-                    onChange={(e) => setMapsLink(e.target.value)}
-                    placeholder="https://maps.app.goo.gl/..."
-                    required
-                    className="w-full focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
-                  />
-                </div>
-                <div className="bg-emerald-100/50 p-3 rounded-md border border-emerald-200">
-                  <p className="text-xs text-emerald-800">
-                    <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
-                  </p>
-                  {geminiUsage && user?.role === "admin" && (
-                    <div className="mt-2 pt-2 border-t border-emerald-200/60">
-                      <p className="text-xs font-medium text-emerald-900">
-                        Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
-                      </p>
-                      <div className="w-full bg-emerald-200/50 rounded-full h-1.5 mt-1">
-                        <div 
-                          className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-emerald-600'}`} 
-                          style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {user?.role === 'admin' && (
+        <div className="flex gap-4 mb-6 border-b border-zinc-200 pb-4">
+          <button
+            type="button"
+            onClick={() => setInputMode("auto")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              inputMode === "auto"
+                ? "bg-emerald-100 text-emerald-800"
+                : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100"
+            }`}
+          >
+            Extração com IA (Google Maps)
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMode("manual")}
+            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+              inputMode === "manual"
+                ? "bg-blue-100 text-blue-800"
+                : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100"
+            }`}
+          >
+            Preenchimento Manual
+          </button>
+        </div>
+
+        {inputMode === "auto" ? (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-6 mb-8">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 mt-1">
+                <Sparkles className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-lg font-medium text-emerald-900">
+                  Extração com Inteligência Artificial
+                </h3>
+                <p className="mt-1 text-sm text-emerald-700">
+                  Nossa IA vai buscar os dados reais do local e estruturá-los em
+                  um arquivo JSON.
+                </p>
+                <div className="mt-4 flex flex-col gap-4">
                   <div>
+                    <label className="block text-sm font-medium text-emerald-900 mb-1">
+                      Link do Google Maps ou Descrição da Empresa
+                    </label>
+                    <textarea
+                      value={mapsLink}
+                      onChange={(e) => setMapsLink(e.target.value)}
+                      placeholder="Cole o link do Google Maps ou digite informações sobre a empresa..."
+                      required={inputMode === "auto"}
+                      rows={3}
+                      className="w-full focus:ring-emerald-500 focus:border-emerald-500 block sm:text-sm border-emerald-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                    />
+                  </div>
+                  <div className="bg-emerald-100/50 p-3 rounded-md border border-emerald-200">
+                    <p className="text-xs text-emerald-800">
+                      <strong>Limites da API:</strong> Com uma chave gratuita do Google AI Studio, você pode gerar até <strong>1.500 sites/templates por dia</strong> (limite de 15 requisições por minuto).
+                    </p>
+                    {geminiUsage && user?.role === "admin" && (
+                      <div className="mt-2 pt-2 border-t border-emerald-200/60">
+                        <p className="text-xs font-medium text-emerald-900">
+                          Uso hoje: {geminiUsage.count} / {geminiUsage.limit} requisições
+                        </p>
+                        <div className="w-full bg-emerald-200/50 rounded-full h-1.5 mt-1">
+                          <div 
+                            className={`h-1.5 rounded-full ${geminiUsage.count >= geminiUsage.limit ? 'bg-red-500' : 'bg-emerald-600'}`} 
+                            style={{ width: `${Math.min((geminiUsage.count / geminiUsage.limit) * 100, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+            <h3 className="text-lg font-medium text-blue-900 mb-4">
+              Preenchimento Manual dos Dados
+            </h3>
+            <div className="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-blue-900 mb-1">Nome da Empresa</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.name}
+                  onChange={(e) => setManualData({ ...manualData, name: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Telefone</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.phone}
+                  onChange={(e) => setManualData({ ...manualData, phone: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Nicho (ex: Barbearia)</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.niche}
+                  onChange={(e) => setManualData({ ...manualData, niche: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-blue-900 mb-1">Endereço Completo</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.address}
+                  onChange={(e) => setManualData({ ...manualData, address: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Cidade</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.city}
+                  onChange={(e) => setManualData({ ...manualData, city: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-blue-900 mb-1">Serviços (separados por vírgula)</label>
+                <input
+                  type="text"
+                  required={inputMode === "manual"}
+                  value={manualData.services}
+                  onChange={(e) => setManualData({ ...manualData, services: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-blue-900 mb-1">Descrição do Negócio</label>
+                <textarea
+                  required={inputMode === "manual"}
+                  rows={3}
+                  value={manualData.description}
+                  onChange={(e) => setManualData({ ...manualData, description: e.target.value })}
+                  className="w-full focus:ring-blue-500 focus:border-blue-500 block sm:text-sm border-blue-300 rounded-md shadow-sm px-3 py-2 border bg-white"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {user?.role === 'admin' && (
+          <div className="mb-8">
                     <label className="block text-sm font-medium text-emerald-900 mb-1">
                       Modelo de Template (Fluxo)
                     </label>
@@ -913,10 +1070,6 @@ NÃO INVENTE DADOS. Se não souber ou não encontrar o local exato, retorne succ
                     </p>
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-        </div>
 
         <div className="pt-5 border-t border-zinc-200 mt-6">
           <div className="flex flex-col sm:flex-row sm:justify-end gap-3">

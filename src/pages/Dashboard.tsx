@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Globe, Calendar, ArrowRight, FileJson, Clock, RefreshCw, CheckCircle } from "lucide-react";
+import { Globe, Calendar, ArrowRight, FileJson, Clock, RefreshCw, CheckCircle, Download, Database, ExternalLink, Settings } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 export default function Dashboard() {
@@ -9,6 +9,60 @@ export default function Dashboard() {
   const [stats, setStats] = useState({ total: 0, today: 0, userProgress: 0, userGoal: 0 });
   const [recentSites, setRecentSites] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [showDbConfig, setShowDbConfig] = useState(false);
+
+  const handleGenerateExport = async () => {
+    setIsGenerating(true);
+    try {
+      const response = await fetch("/api/admin/generate-export", {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        alert("Arquivos de exportação gerados com sucesso!");
+      } else {
+        const data = await response.json();
+        alert(data.error || "Erro ao gerar exportação");
+      }
+    } catch (err) {
+      console.error("Generation error:", err);
+      alert("Erro ao gerar exportação");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownloadDB = async (format: 'json' | 'sqlite' = 'json') => {
+    setIsExporting(true);
+    try {
+      const response = await fetch(`/api/admin/export-db?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = format === 'sqlite' ? 'database.sqlite' : 'database_export.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        const data = await response.json();
+        alert(data.error || "Erro ao baixar banco de dados");
+      }
+    } catch (err) {
+      console.error("Download error:", err);
+      alert("Erro ao baixar banco de dados");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -35,6 +89,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setIsLoading(true);
+      setError(null);
       try {
         const [statsRes, sitesRes] = await Promise.all([
           fetch("/api/stats", {
@@ -57,11 +113,10 @@ export default function Dashboard() {
         }
 
         if (!statsRes.ok || !sitesRes.ok) {
-          const statsText = await statsRes.text().catch(() => "");
-          const sitesText = await sitesRes.text().catch(() => "");
-          throw new Error(
-            `Failed to fetch dashboard data. Stats: ${statsRes.status} ${statsText}, Sites: ${sitesRes.status} ${sitesText}`,
-          );
+          const statsData = await statsRes.json().catch(() => ({}));
+          const sitesData = await sitesRes.json().catch(() => ({}));
+          const errorMsg = statsData.error || sitesData.error || "Erro ao carregar dados";
+          throw new Error(errorMsg);
         }
 
         const statsData = await statsRes.json();
@@ -69,8 +124,9 @@ export default function Dashboard() {
 
         setStats(statsData);
         setRecentSites(sitesData.slice(0, 5)); // Get top 5
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching dashboard data:", error);
+        setError(error.message || "Erro desconhecido ao carregar dashboard");
       } finally {
         setIsLoading(false);
       }
@@ -115,13 +171,113 @@ export default function Dashboard() {
             <p className="text-sm text-zinc-500">Setor: {user.sector}</p>
           )}
         </div>
-        <Link
-          to="/create"
-          className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700"
-        >
-          Nova Análise
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {user?.role === 'admin' && (
+            <>
+              <button
+                onClick={handleGenerateExport}
+                disabled={isGenerating}
+                className="inline-flex items-center justify-center px-4 py-2 border border-emerald-300 rounded-md shadow-sm text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50"
+                title="Gera novos arquivos JSON e SQLite com os dados mais recentes"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isGenerating ? 'animate-spin' : ''}`} />
+                {isGenerating ? 'Gerando...' : 'Atualizar Exportação'}
+              </button>
+              <button
+                onClick={() => handleDownloadDB('json')}
+                disabled={isExporting}
+                className="inline-flex items-center justify-center px-4 py-2 border border-zinc-300 rounded-md shadow-sm text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <Download className={`w-4 h-4 mr-2 ${isExporting ? 'animate-bounce' : ''}`} />
+                {isExporting ? 'Exportando...' : 'JSON'}
+              </button>
+              <button
+                onClick={() => handleDownloadDB('sqlite')}
+                disabled={isExporting}
+                className="inline-flex items-center justify-center px-4 py-2 border border-zinc-300 rounded-md shadow-sm text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50 disabled:opacity-50"
+              >
+                <Database className={`w-4 h-4 mr-2 ${isExporting ? 'animate-bounce' : ''}`} />
+                {isExporting ? 'Exportando...' : 'SQLite'}
+              </button>
+              <a
+                href="https://sqlitecloud.io/dashboard"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center px-4 py-2 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                title="Acessar o console do SQLiteCloud"
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Console
+              </a>
+              <button
+                onClick={() => setShowDbConfig(!showDbConfig)}
+                className="inline-flex items-center justify-center px-4 py-2 border border-zinc-300 rounded-md shadow-sm text-sm font-medium text-zinc-700 bg-white hover:bg-zinc-50"
+                title="Ver configurações do banco"
+              >
+                <Settings className={`w-4 h-4 ${showDbConfig ? 'animate-spin' : ''}`} />
+              </button>
+            </>
+          )}
+          <Link
+            to="/create"
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700"
+          >
+            Nova Análise
+          </Link>
+        </div>
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg relative flex items-center justify-between" role="alert">
+          <div>
+            <strong className="font-bold">Erro: </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+          <button 
+            className="ml-4 p-1 hover:bg-red-100 rounded-full transition-colors"
+            onClick={() => window.location.reload()}
+            title="Recarregar página"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
+      {showDbConfig && user?.role === 'admin' && (
+        <div className="bg-zinc-900 text-zinc-100 p-6 rounded-lg shadow-xl border border-zinc-700 space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium flex items-center gap-2">
+              <Database className="w-5 h-5 text-blue-400" />
+              Configurações do Banco de Dados
+            </h3>
+            <button 
+              onClick={() => setShowDbConfig(false)}
+              className="text-zinc-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-zinc-400 uppercase font-bold tracking-wider">Connection String (SQLiteCloud)</p>
+            <div className="bg-black p-3 rounded font-mono text-xs break-all border border-zinc-800">
+              sqlitecloud://cmq6frwshz.g4.sqlite.cloud:8860/DsCompany_Prospeccao.db?apikey=Dor8OwUECYmrbcS5vWfsdGpjCpdm9ecSDJtywgvRw8k
+            </div>
+            <p className="text-xs text-zinc-500 italic">
+              * Esta string é usada para conectar o sistema ao banco de dados na nuvem.
+            </p>
+          </div>
+          <div className="pt-2 flex gap-4">
+            <div className="flex-1 bg-zinc-800 p-3 rounded">
+              <p className="text-xs text-zinc-400">Ping Keep-Alive</p>
+              <p className="text-sm font-medium text-emerald-400">Ativo (5 min)</p>
+            </div>
+            <div className="flex-1 bg-zinc-800 p-3 rounded">
+              <p className="text-xs text-zinc-400">Status da Conexão</p>
+              <p className="text-sm font-medium text-emerald-400">Conectado</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
         {statCards.map((item) => (

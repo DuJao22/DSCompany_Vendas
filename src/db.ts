@@ -1,22 +1,46 @@
 import { Database } from '@sqlitecloud/drivers';
 import crypto from 'crypto';
 
-const connectionString = 'sqlitecloud://cmq6frwshz.g4.sqlite.cloud:8860/DsCompany_Prospeccao.db?apikey=Dor8OwUECYmrbcS5vWfsdGpjCpdm9ecSDJtywgvRw8k';
+const connectionString = process.env.SQLITE_CLOUD_URL || 'sqlitecloud://cmq6frwshz.g4.sqlite.cloud:8860/DsCompany_Prospeccao.db?apikey=Dor8OwUECYmrbcS5vWfsdGpjCpdm9ecSDJtywgvRw8k';
 
 class DBWrapper {
   private db: Database;
+  private reconnectPromise: Promise<void> | null = null;
+  private lastSuccess: number = Date.now();
+  private cooldownUntil: number = 0;
 
   constructor() {
     this.db = new Database(connectionString);
   }
 
   async sql(strings: TemplateStringsArray, ...values: any[]) {
-    let retries = 3;
-    while (retries > 0) {
+    let retries = 10;
+    let attempt = 0;
+    
+    while (attempt < retries) {
+      // Check for cooldown
+      const now = Date.now();
+      if (now < this.cooldownUntil) {
+        const wait = this.cooldownUntil - now;
+        console.warn(`SQLiteCloud in cooldown. Waiting ${wait}ms...`);
+        await new Promise(resolve => setTimeout(resolve, wait));
+      }
+
       try {
-        return await this.db.sql(strings, ...values);
+        if (this.reconnectPromise) {
+          await this.reconnectPromise;
+        }
+        const result = await this.db.sql(strings, ...values);
+        this.lastSuccess = Date.now();
+        return result;
       } catch (error: any) {
+        attempt++;
+        const isMaxConnections = error.errorCode === '10008' || 
+                                error.message?.includes('Maximum number of allowed connections reached') ||
+                                error.message?.includes('Client is forced to disconnect');
+        
         const isConnectionError = 
+          isMaxConnections ||
           error.message?.includes('Connection unavailable') || 
           error.errorCode === 'ERR_CONNECTION_NOT_ESTABLISHED' ||
           error.message?.includes('disconnected') ||
@@ -26,27 +50,116 @@ class DBWrapper {
           error.message?.includes('not established') ||
           error.message?.includes('network');
 
-        if (isConnectionError && retries > 1) {
-          console.warn(`SQLiteCloud connection lost. Reconnecting... (Retries left: ${retries - 1})`);
-          try {
-            this.db.close();
-          } catch (e) {
-            // Ignore close errors
+        if (isConnectionError && attempt < retries) {
+          if (isMaxConnections) {
+            // Set a cooldown to stop hammering the server
+            this.cooldownUntil = Date.now() + 5000; 
           }
-          
-          // Wait before reconnecting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          this.db = new Database(connectionString);
-          retries--;
+
+          if (!this.reconnectPromise) {
+            const errorType = isMaxConnections ? 'MAX_CONNECTIONS' : 'CONNECTION_LOST';
+            console.warn(`SQLiteCloud ${errorType} error: ${error.message}. Reconnecting... (Attempt ${attempt}/${retries})`);
+            
+            this.reconnectPromise = (async () => {
+              try {
+                console.log('Attempting to close old SQLiteCloud connection...');
+                await Promise.race([
+                  new Promise((resolve) => {
+                    try {
+                      this.db.close(() => resolve(true));
+                    } catch (e) {
+                      resolve(false);
+                    }
+                  }),
+                  new Promise((resolve) => setTimeout(() => resolve(false), 2000))
+                ]);
+              } catch (e) {
+                // Ignore close errors
+              }
+              
+              // Exponential backoff with jitter
+              // If it's a max connections error, wait significantly longer (15-30s)
+              const baseWait = isMaxConnections ? 15000 : 3000;
+              const jitter = Math.random() * 5000;
+              const waitTime = baseWait + (attempt * 3000) + jitter;
+              
+              console.log(`Waiting ${Math.round(waitTime)}ms before creating new database instance...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              
+              try {
+                this.db = new Database(connectionString);
+                console.log('New SQLiteCloud database instance created successfully.');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+              } catch (connErr) {
+                console.error('Failed to create new Database instance:', connErr);
+              }
+            })().finally(() => {
+              this.reconnectPromise = null;
+            });
+          }
+          await this.reconnectPromise;
           continue;
+        }
+        
+        if (attempt >= retries) {
+          console.error(`SQLiteCloud: Max retries (${retries}) reached. Last error:`, error);
         }
         throw error;
       }
     }
   }
+
+  async close() {
+    try {
+      this.db.close();
+      console.log('SQLiteCloud connection closed gracefully.');
+    } catch (e) {
+      console.error('Error closing SQLiteCloud connection:', e);
+    }
+  }
+
+  /**
+   * Pings the database to keep the connection alive
+   */
+  async ping() {
+    // Don't ping if we recently had a success or if we are reconnecting
+    if (Date.now() - this.lastSuccess < 4 * 60 * 1000 || this.reconnectPromise) {
+      return;
+    }
+
+    try {
+      await this.sql`SELECT 1`;
+      console.log(`[${new Date().toISOString()}] SQLiteCloud ping successful.`);
+    } catch (error) {
+      console.error('SQLiteCloud ping failed:', error);
+    }
+  }
 }
 
-const db = new DBWrapper();
+const globalForDb = globalThis as unknown as {
+  db: DBWrapper | undefined;
+};
+
+const db = globalForDb.db ?? new DBWrapper();
+
+if (process.env.NODE_ENV !== 'production') globalForDb.db = db;
+
+// Keep-alive ping every 5 minutes to prevent SQLiteCloud from sleeping
+console.log('Initializing SQLiteCloud keep-alive ping (every 5 minutes)...');
+setInterval(() => {
+  db.ping();
+}, 5 * 60 * 1000);
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await db.close();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  await db.close();
+  process.exit(0);
+});
 
 // Initialize schema asynchronously
 async function initializeSchema() {
